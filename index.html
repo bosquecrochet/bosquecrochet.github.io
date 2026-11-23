@@ -7,9 +7,9 @@
   <meta name="theme-color" content="#faf8f3">
   <title>El bosque de crochet · Piezas tejidas a mano</title>
   <link rel="icon" href="assets/flor-crochet.png" type="image/png">
-  <link rel="stylesheet" href="style.css?v=portada-6">
+  <link rel="stylesheet" href="style.css?v=portada-7">
   <script src="vendor/supabase.js" defer></script>
-  <script src="app.js?v=portada-6" type="module"></script>
+  <script src="app.js?v=portada-7" type="module"></script>
 </head>
 <body>
   <a class="skip" href="#coleccion">Saltar a la colección</a>
@@ -137,20 +137,6 @@
         <ol id="order-list" class="order-list"></ol>
         <button id="save-order" class="button primary">Guardar orden</button>
         <p id="order-status" class="status" role="status"></p>
-      </form>
-    </div>
-  </dialog>
-  <dialog id="cover-editor" aria-labelledby="cover-title" aria-describedby="cover-help">
-    <div class="dialog-inner">
-      <button type="button" data-close class="close" aria-label="Cerrar editor de portada">×</button>
-      <h2 id="cover-title">Elegir portada</h2>
-      <p id="cover-help">Elige hasta tres piezas visibles con foto. La pieza principal aparece en grande.</p>
-      <form id="cover-form">
-        <div class="cover-slot"><label for="cover-first">Pieza principal</label><select id="cover-first" required></select><img id="cover-first-preview" width="58" height="58" alt="" hidden></div>
-        <div class="cover-slot"><label for="cover-second">Segunda pieza (opcional)</label><select id="cover-second"></select><img id="cover-second-preview" width="58" height="58" alt="" hidden></div>
-        <div class="cover-slot"><label for="cover-third">Tercera pieza (opcional)</label><select id="cover-third"></select><img id="cover-third-preview" width="58" height="58" alt="" hidden></div>
-        <button class="button primary" id="save-cover">Guardar portada</button>
-        <p id="cover-status" class="status" role="status"></p>
       </form>
     </div>
   </dialog>

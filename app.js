@@ -3,6 +3,7 @@ import {
   saveLocal, uploadMedia, validateFile, writeCatalog
 } from "./catalog.js?v=crochet-3";
 import { enableReordering, moveVisibleProject, reorderVisibleProjects } from "./ordering.js?v=orden-5";
+import { coverPositions, nextCoverIds } from "./cover.js";
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char =>
@@ -18,7 +19,6 @@ const legacyProjects = new Map(readLocal("bosqueCrochetUserProjects.v2", []).map
 const pageSize = 12;
 const categoryIcons = new Set(["all", "amigurumi", "flores", "navidad", "llaveros", "hogar", "accesorios", "letras", "textil", "decoracion"]);
 const cardMediaIndexes = new Map();
-const coverSlots = ["cover-first", "cover-second", "cover-third"];
 const defaultCover = ["17", "grupo-raton", "38"];
 
 let catalog = configured ? { ...initialCatalog, projects: [] } : initialCatalog;
@@ -92,7 +92,7 @@ function coverProjects(state) {
   if (!state.coverIds) {
     ordered.push(...available.filter(piece => !ordered.includes(piece)));
   }
-  return ordered.slice(0, coverSlots.length);
+  return ordered.slice(0, coverPositions.length);
 }
 
 function renderCover() {
@@ -150,6 +150,25 @@ function cardOrderControls(project, index, count) {
     + '</div>';
 }
 
+function cardCoverControl(project, featured) {
+  if (!coverPhoto(project)) return "";
+  const id = String(project.idKey);
+  const ids = featured.map(piece => String(piece.idKey));
+  const current = ids.indexOf(id);
+  const option = (index, label, enabled) => '<option value="' + index + '"'
+    + (current === index ? " selected" : enabled ? "" : " disabled") + '>' + esc(label) + '</option>';
+  const positions = coverPositions.map((position, index) => {
+    const occupant = featured[index];
+    const label = occupant && index !== current
+      ? position + (current === -1 ? " (sustituye a " : " (intercambia con ") + occupant.title + ")"
+      : position;
+    return option(index, label, nextCoverIds(ids, id, index) !== null);
+  }).join("");
+  return '<label class="card-cover"><span>Portada</span><select data-card-cover aria-label="Portada de '
+    + esc(project.title) + '">' + option(-1, "Fuera de portada", nextCoverIds(ids, id, -1) !== null)
+    + positions + '</select></label><p id="cover-card-status-' + esc(id) + '" class="card-cover-status" role="status"></p>';
+}
+
 function matchingProjects(query) {
   const source = showHidden ? workshop?.projects || [] : catalog.projects;
   return source.filter(project => {
@@ -171,6 +190,7 @@ function renderGallery() {
   if (sort === "name") pieces.sort((a, b) => a.title.localeCompare(b.title, "es"));
   if (sort === "newest") pieces.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const showOrder = canReorderGallery() && pieces.length > 1;
+  const featured = admin && workshop && !showHidden ? coverProjects(workshop) : null;
   $("gallery").innerHTML = pieces.slice(0, limit).map((project, index) => {
     const id = esc(project.idKey);
     const marked = favorites.has(String(project.idKey));
@@ -181,7 +201,8 @@ function renderGallery() {
       + '</span></button>'
       + (showHidden ? "" : '<button class="heart" data-favorite="' + id + '" aria-label="Favorita: ' + esc(project.title)
       + '" aria-pressed="' + marked + '">' + (marked ? "♥" : "♡") + '</button>') + '</div>'
-      + (showOrder ? cardOrderControls(project, index, pieces.length) : "") + '</article>';
+      + (showOrder ? cardOrderControls(project, index, pieces.length) : "")
+      + (featured ? cardCoverControl(project, featured) : "") + '</article>';
   }).join("");
   const count = pieces.length + (pieces.length === 1 ? " pieza" : " piezas");
   const waitingForCatalog = !showHidden && configured && publicRevision === null;
@@ -313,7 +334,6 @@ function clearWorkshop() {
   $("editor").close();
   $("category-editor").close();
   $("order-editor").close();
-  $("cover-editor").close();
   refreshAdmin();
   if (wasBrowsingHidden) updateGallery();
   else if (hadAdmin) renderGallery();
@@ -381,9 +401,9 @@ async function runAction(button, statusId, action) {
   status.textContent = "Procesando…";
   try {
     const message = await action();
-    status.textContent = message || "";
+    ($(statusId) || status).textContent = message || "";
   } catch (error) {
-    status.textContent = error.message || "Algo ha fallado. Vuelve a intentarlo.";
+    ($(statusId) || status).textContent = error.message || "Algo ha fallado. Vuelve a intentarlo.";
   } finally {
     busy = false;
     button.disabled = false;
@@ -525,6 +545,26 @@ $("gallery").addEventListener("click", event => {
   if (open) openDetail(open.dataset.piece);
   if (favorite) toggleFavorite(favorite.dataset.favorite, favorite);
 });
+$("gallery").addEventListener("change", event => {
+  const select = event.target.closest("[data-card-cover]");
+  if (!select || !admin || !workshop || showHidden) return;
+  const id = select.closest("[data-card]").dataset.card;
+  const selected = coverProjects(workshop).map(piece => String(piece.idKey));
+  const target = Number(select.value);
+  select.value = String(selected.indexOf(id));
+  const coverIds = nextCoverIds(selected, id, target);
+  if (!coverIds || !coverPhoto(projectById(id))) return;
+
+  const statusId = "cover-card-status-" + id;
+  runAction(select, statusId, async () => {
+    if (publicRevision !== revision) throw new Error("La colección ha cambiado. Recarga la página antes de editar la portada.");
+    await save({ ...workshop, coverIds }, revision);
+    if (document.activeElement === document.body || document.activeElement === select) {
+      $(statusId)?.closest("[data-card]")?.querySelector("[data-card-cover]")?.focus({ preventScroll: true });
+    }
+    return "Portada guardada.";
+  });
+});
 $("thumbs").addEventListener("click", event => {
   const thumb = event.target.closest("[data-index]");
   if (!thumb) return;
@@ -588,51 +628,15 @@ $("view-hidden").addEventListener("click", () => {
 });
 $("new-piece").addEventListener("click", () => openEditor());
 
-function updateCoverPreview() {
-  for (const slot of coverSlots) {
-    const preview = $(slot + "-preview");
-    const src = coverPhoto(projectById($(slot).value));
-    preview.hidden = !src;
-    if (src) preview.src = src;
-    else preview.removeAttribute("src");
-  }
-}
-
 $("open-cover").addEventListener("click", () => {
   if (!admin || !workshop) return;
-  editorRevision = revision;
-  const selected = coverProjects(workshop);
-  const choices = workshop.projects.filter(coverPhoto).sort((a, b) => a.title.localeCompare(b.title, "es"));
-  const options = choices.map(piece => '<option value="' + esc(piece.idKey) + '">' + esc(piece.title) + '</option>').join("");
-  coverSlots.forEach((slot, index) => {
-    const select = $(slot);
-    select.innerHTML = '<option value="">' + (index === 0 ? "Elige una pieza" : "Sin pieza") + '</option>' + options;
-    select.value = selected[index]?.idKey ?? "";
-    select.disabled = !choices.length;
-  });
-  $("save-cover").disabled = !choices.length;
-  setStatus("cover-status", choices.length ? "" : "Publica una pieza con foto para poder elegirla.");
-  updateCoverPreview();
+  showHidden = false;
+  onlyFavorites = false;
+  $("search").value = "";
+  setCategory("all");
   $("admin").close();
-  $("cover-editor").showModal();
-});
-$("cover-form").addEventListener("change", event => {
-  if (coverSlots.includes(event.target.id)) updateCoverPreview();
-});
-$("cover-form").addEventListener("submit", event => {
-  event.preventDefault();
-  runAction(event.submitter, "cover-status", async () => {
-    if (!admin || !workshop) throw new Error("Inicia sesión con la cuenta del taller.");
-    const coverIds = coverSlots.map(slot => $(slot).value).filter(Boolean);
-    if (!$("cover-first").value || coverIds.some(id => !coverPhoto(projectById(id)))) {
-      throw new Error("Elige una pieza principal y usa solo piezas visibles con foto.");
-    }
-    if (new Set(coverIds).size !== coverIds.length) throw new Error("Elige una pieza distinta en cada posición.");
-    await save({ ...workshop, coverIds }, editorRevision);
-    $("cover-editor").close();
-    $("admin").showModal();
-    setStatus("admin-status", "Portada actualizada.");
-  });
+  $("collection-title").focus({ preventScroll: true });
+  $("coleccion").scrollIntoView();
 });
 
 const orderList = $("order-list");
