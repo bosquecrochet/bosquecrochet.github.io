@@ -2,7 +2,7 @@ import {
   client, configured, initialCatalog, legacyCatalog, readCatalog, readLocal, safeMediaUrl,
   saveLocal, uploadMedia, validateFile, writeCatalog
 } from "./catalog.js?v=crochet-3";
-import { enableReordering, reorderVisibleProjects } from "./ordering.js";
+import { enableReordering, moveVisibleProject, reorderVisibleProjects } from "./ordering.js?v=orden-5";
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char =>
@@ -125,6 +125,29 @@ function cardMediaControls(project) {
     + '<button type="button" data-media-step="1" aria-label="Archivo siguiente"><span aria-hidden="true">›</span></button></div>';
 }
 
+function canReorderGallery() {
+  return admin && workshop !== null && !showHidden && $("sort").value === "collection";
+}
+
+function cardOrderControls(project, index, count) {
+  const title = esc(project.title);
+  return '<div class="card-order" role="group" aria-label="Orden de ' + title + '">'
+    + '<button type="button" data-card-move="-1" aria-label="Subir ' + title + '"'
+    + (index === 0 ? " disabled" : "") + '><span aria-hidden="true">↑</span></button>'
+    + '<button type="button" data-card-move="1" aria-label="Bajar ' + title + '"'
+    + (index === count - 1 ? " disabled" : "") + '><span aria-hidden="true">↓</span></button>'
+    + '</div>';
+}
+
+function matchingProjects(query) {
+  const source = showHidden ? workshop?.projects || [] : catalog.projects;
+  return source.filter(project => {
+    const text = fold([project.title, project.desc, categoryName(project.cat), ...(project.tags || [])].join(" "));
+    return (!showHidden || project.hidden === true) && (activeCategory === "all" || project.cat === activeCategory)
+      && (!onlyFavorites || favorites.has(String(project.idKey))) && text.includes(query);
+  });
+}
+
 function renderGallery() {
   $("collection-name").textContent = showHidden ? "Piezas ocultas" : onlyFavorites ? "Favoritas"
     : activeCategory === "all" ? "La colección" : categoryName(activeCategory);
@@ -133,15 +156,11 @@ function renderGallery() {
   if (!icon.hidden) icon.src = categoryIcon(activeCategory);
   const query = fold($("search").value.trim());
   const sort = $("sort").value;
-  const source = showHidden ? workshop?.projects || [] : catalog.projects;
-  const pieces = source.filter(project => {
-    const text = fold([project.title, project.desc, categoryName(project.cat), ...(project.tags || [])].join(" "));
-    return (!showHidden || project.hidden === true) && (activeCategory === "all" || project.cat === activeCategory)
-      && (!onlyFavorites || favorites.has(String(project.idKey))) && text.includes(query);
-  });
+  const pieces = matchingProjects(query);
   if (sort === "name") pieces.sort((a, b) => a.title.localeCompare(b.title, "es"));
   if (sort === "newest") pieces.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  $("gallery").innerHTML = pieces.slice(0, limit).map(project => {
+  const showOrder = canReorderGallery() && pieces.length > 1;
+  $("gallery").innerHTML = pieces.slice(0, limit).map((project, index) => {
     const id = esc(project.idKey);
     const marked = favorites.has(String(project.idKey));
     return '<article class="card" data-card="' + id + '"><div class="card-photo">' + cardPreview(project)
@@ -150,7 +169,8 @@ function renderGallery() {
       + '</span><span class="card-title">' + esc(project.title) + '</span><span class="card-desc">' + esc(project.desc)
       + '</span></button>'
       + (showHidden ? "" : '<button class="heart" data-favorite="' + id + '" aria-label="Favorita: ' + esc(project.title)
-      + '" aria-pressed="' + marked + '">' + (marked ? "♥" : "♡") + '</button>') + '</div></article>';
+      + '" aria-pressed="' + marked + '">' + (marked ? "♥" : "♡") + '</button>') + '</div>'
+      + (showOrder ? cardOrderControls(project, index, pieces.length) : "") + '</article>';
   }).join("");
   const count = pieces.length + (pieces.length === 1 ? " pieza" : " piezas");
   const waitingForCatalog = !showHidden && configured && publicRevision === null;
@@ -271,6 +291,7 @@ function refreshAdmin() {
 }
 
 function clearWorkshop() {
+  const hadAdmin = admin;
   const wasBrowsingHidden = showHidden;
   const viewedHidden = projectById(detailId)?.hidden === true;
   admin = false;
@@ -283,6 +304,8 @@ function clearWorkshop() {
   $("order-editor").close();
   refreshAdmin();
   if (wasBrowsingHidden) updateGallery();
+  else if (hadAdmin) renderGallery();
+  if (hadAdmin) setStatus("gallery-order-status", "");
 }
 
 async function checkSession() {
@@ -304,6 +327,7 @@ async function checkSession() {
   revision = dataWorkshop.revision;
   admin = true;
   refreshAdmin();
+  renderGallery();
 }
 
 async function loadPublished() {
@@ -437,7 +461,41 @@ $("more").addEventListener("click", () => {
   renderGallery();
   $("gallery").children[prior]?.querySelector("button")?.focus({ preventScroll: true });
 });
+function moveFromGallery(button) {
+  if (!canReorderGallery() || busy) return;
+  const id = button.closest("[data-card]").dataset.card;
+  const direction = Number(button.dataset.cardMove);
+  const query = fold($("search").value.trim());
+  const category = activeCategory;
+  const favoritesOnly = onlyFavorites;
+  const ids = matchingProjects(query).map(piece => String(piece.idKey));
+  const move = moveVisibleProject(workshop.projects, ids, id, direction);
+  if (!move) return;
+
+  runAction(button, "gallery-order-status", async () => {
+    if (publicRevision !== revision) throw new Error("La colección ha cambiado. Recarga la página antes de ordenar.");
+    await save({ ...workshop, projects: move.projects }, revision);
+    const sameView = canReorderGallery() && activeCategory === category && onlyFavorites === favoritesOnly
+      && fold($("search").value.trim()) === query;
+    if (sameView) {
+      if (move.index >= limit) {
+        limit = move.index + 1;
+        renderGallery();
+      }
+      if (document.activeElement === document.body || document.activeElement === button) {
+        const card = Array.from($("gallery").children).find(item => item.dataset.card === id);
+        const next = card?.querySelector('[data-card-move="' + direction + '"]:enabled')
+          || card?.querySelector("[data-card-move]:enabled");
+        next?.focus({ preventScroll: true });
+      }
+    }
+    return "Orden guardado.";
+  });
+}
+
 $("gallery").addEventListener("click", event => {
+  const move = event.target.closest("[data-card-move]");
+  if (move) return moveFromGallery(move);
   const step = event.target.closest("[data-media-step]");
   if (step) {
     const card = step.closest("[data-card]");

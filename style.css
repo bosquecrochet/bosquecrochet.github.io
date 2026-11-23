@@ -71,6 +71,8 @@ section[id] { scroll-margin-top: 4.7rem; }
 .categories a:hover, .categories a[aria-current=true] { color: var(--green); background: var(--thread) bottom left / auto 3px repeat-x; }
 .categories a[aria-current=true] { font-weight: 650; }
 .gallery-meta { min-height: 3.25rem; color: var(--soft); font-size: .92rem; }
+.gallery-meta #gallery-order-status { margin: 0; }
+#gallery-order-status:empty { display: none; }
 .gallery { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); column-gap: clamp(.8rem, 2.3vw, 2rem); row-gap: clamp(1.25rem, 3vw, 2.4rem); }
 .card { min-width: 0; position: relative; padding-bottom: 5px; overflow-wrap: anywhere; }
 .card-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
@@ -91,6 +93,10 @@ section[id] { scroll-margin-top: 4.7rem; }
 .card-title { display: block; font: 500 clamp(1.28rem, 2.2vw, 1.85rem)/1.12 var(--serif); letter-spacing: -.025em; }
 .card-desc { display: block; margin-top: .38rem; color: var(--soft); font-size: .94rem; }
 .heart { width: 44px; aspect-ratio: 1; border: 0; background: var(--paper); color: #5e3429; display: grid; place-items: center; font-size: 1.45rem; line-height: 1; }
+.card-order { display: flex; justify-content: flex-end; gap: .25rem; margin-bottom: .3rem; }
+.card-order button { width: 44px; height: 44px; border: 2px dashed var(--field-border); border-radius: .45rem; background: var(--cream); color: var(--ink); font-size: 1.18rem; }
+.card-order button:hover:enabled { background: #dedbcf; }
+.card-order button:disabled { cursor: default; opacity: .4; }
 .empty { padding-block: 3rem; text-align: center; }
 .more { display: grid; justify-content: center; margin-top: 1.5rem; }
 .about { display: grid; grid-template-columns: minmax(0, .55fr) minmax(0, 1fr); column-gap: 2rem; align-items: baseline; padding-block: 3rem; }

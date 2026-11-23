@@ -8,6 +8,18 @@ export function reorderVisibleProjects(projects, ids) {
   return projects.map(piece => piece.hidden === true ? piece : byId.get(ids[index++]));
 }
 
+export function moveVisibleProject(projects, ids, id, direction) {
+  const current = ids.indexOf(id);
+  const target = current + direction;
+  if (current === -1 || target < 0 || target >= ids.length) return null;
+  const first = projects.findIndex(piece => String(piece.idKey) === id && piece.hidden !== true);
+  const second = projects.findIndex(piece => String(piece.idKey) === ids[target] && piece.hidden !== true);
+  if (first === -1 || second === -1) return null;
+  const reordered = [...projects];
+  [reordered[first], reordered[second]] = [reordered[second], reordered[first]];
+  return { projects: reordered, index: target };
+}
+
 export function enableReordering(list, announce) {
   let drag = null;
   let frame = 0;
