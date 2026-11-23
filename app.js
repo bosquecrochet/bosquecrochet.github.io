@@ -18,6 +18,8 @@ const legacyProjects = new Map(readLocal("bosqueCrochetUserProjects.v2", []).map
 const pageSize = 12;
 const categoryIcons = new Set(["all", "amigurumi", "flores", "navidad", "llaveros", "hogar", "accesorios", "letras", "textil", "decoracion"]);
 const cardMediaIndexes = new Map();
+const coverSlots = ["cover-first", "cover-second", "cover-third"];
+const defaultCover = ["17", "grupo-raton", "38"];
 
 let catalog = configured ? { ...initialCatalog, projects: [] } : initialCatalog;
 let publicRevision = null;
@@ -76,22 +78,31 @@ function renderCategories() {
   nav.scrollLeft = scroll;
 }
 
+function coverPhoto(piece) {
+  if (!piece || piece.hidden === true) return "";
+  return piece.media.filter(item => item.type === "image").map(item => safeMediaUrl(item.src)).find(Boolean) || "";
+}
+
+function coverProjects(state) {
+  const available = state.projects.filter(coverPhoto);
+  const selected = state.coverIds ?? defaultCover;
+  const ordered = [...new Set(selected)].map(id =>
+    available.find(piece => String(piece.idKey) === String(id))
+  ).filter(Boolean);
+  if (!state.coverIds) {
+    ordered.push(...available.filter(piece => !ordered.includes(piece)));
+  }
+  return ordered.slice(0, coverSlots.length);
+}
+
 function renderCover() {
   const cover = $("hero-photos");
-  const featured = ["17", "grupo-raton", "38"];
-  const available = catalog.projects.flatMap(piece => {
-    const photo = piece.media.find(item => item.type === "image" && safeMediaUrl(item.src));
-    return photo ? [{ piece, src: safeMediaUrl(photo.src) }] : [];
-  });
-  const selected = featured.map(id => available.find(item => String(item.piece.idKey) === id)).filter(Boolean);
-  for (const item of available) {
-    if (selected.length === featured.length) break;
-    if (!selected.includes(item)) selected.push(item);
-  }
+  const selected = coverProjects(catalog);
   cover.hidden = !selected.length;
   cover.classList.toggle("single", selected.length === 1);
-  const html = selected.map(({ piece, src }, index) =>
-    '<figure class="hero-photo"><img src="' + esc(src) + '" alt="' + esc(piece.title)
+  cover.classList.toggle("pair", selected.length === 2);
+  const html = selected.map((piece, index) =>
+    '<figure class="hero-photo"><img src="' + esc(coverPhoto(piece)) + '" alt="' + esc(piece.title)
     + '" decoding="async"' + (index === 0 ? ' fetchpriority="high"' : "") + '><figcaption>'
     + esc(piece.title) + '</figcaption></figure>'
   ).join("");
@@ -302,6 +313,7 @@ function clearWorkshop() {
   $("editor").close();
   $("category-editor").close();
   $("order-editor").close();
+  $("cover-editor").close();
   refreshAdmin();
   if (wasBrowsingHidden) updateGallery();
   else if (hadAdmin) renderGallery();
@@ -575,6 +587,54 @@ $("view-hidden").addEventListener("click", () => {
   $("coleccion").scrollIntoView();
 });
 $("new-piece").addEventListener("click", () => openEditor());
+
+function updateCoverPreview() {
+  for (const slot of coverSlots) {
+    const preview = $(slot + "-preview");
+    const src = coverPhoto(projectById($(slot).value));
+    preview.hidden = !src;
+    if (src) preview.src = src;
+    else preview.removeAttribute("src");
+  }
+}
+
+$("open-cover").addEventListener("click", () => {
+  if (!admin || !workshop) return;
+  editorRevision = revision;
+  const selected = coverProjects(workshop);
+  const choices = workshop.projects.filter(coverPhoto).sort((a, b) => a.title.localeCompare(b.title, "es"));
+  const options = choices.map(piece => '<option value="' + esc(piece.idKey) + '">' + esc(piece.title) + '</option>').join("");
+  coverSlots.forEach((slot, index) => {
+    const select = $(slot);
+    select.innerHTML = '<option value="">' + (index === 0 ? "Elige una pieza" : "Sin pieza") + '</option>' + options;
+    select.value = selected[index]?.idKey ?? "";
+    select.disabled = !choices.length;
+  });
+  $("save-cover").disabled = !choices.length;
+  setStatus("cover-status", choices.length ? "" : "Publica una pieza con foto para poder elegirla.");
+  updateCoverPreview();
+  $("admin").close();
+  $("cover-editor").showModal();
+});
+$("cover-form").addEventListener("change", event => {
+  if (coverSlots.includes(event.target.id)) updateCoverPreview();
+});
+$("cover-form").addEventListener("submit", event => {
+  event.preventDefault();
+  runAction(event.submitter, "cover-status", async () => {
+    if (!admin || !workshop) throw new Error("Inicia sesión con la cuenta del taller.");
+    const coverIds = coverSlots.map(slot => $(slot).value).filter(Boolean);
+    if (!$("cover-first").value || coverIds.some(id => !coverPhoto(projectById(id)))) {
+      throw new Error("Elige una pieza principal y usa solo piezas visibles con foto.");
+    }
+    if (new Set(coverIds).size !== coverIds.length) throw new Error("Elige una pieza distinta en cada posición.");
+    await save({ ...workshop, coverIds }, editorRevision);
+    $("cover-editor").close();
+    $("admin").showModal();
+    setStatus("admin-status", "Portada actualizada.");
+  });
+});
+
 const orderList = $("order-list");
 enableReordering(orderList, message => setStatus("order-status", message));
 
@@ -733,7 +793,7 @@ $("category-form").addEventListener("submit", event => {
     if (names.includes("") || new Set(names).size !== names.length) throw new Error("Escribe un nombre distinto para cada categoría.");
     const ids = new Set(categories.map(cat => cat.id));
     const projects = workshop.projects.map(item => ids.has(item.cat) ? item : { ...item, cat: "decoracion" });
-    await save({ categories, projects }, editorRevision);
+    await save({ ...workshop, categories, projects }, editorRevision);
     $("category-editor").close();
     setStatus("admin-status", "Categorías publicadas.");
     $("admin").showModal();
