@@ -11,7 +11,8 @@ const bucket = "bosque-media";
 const mediaPrefix = SUPABASE_URL.trim().replace(/\/$/, "") + "/storage/v1/object/public/" + bucket + "/";
 const originalAssets = new Set(initialCatalog.projects.flatMap(project => project.media.map(file => file.src)));
 
-export const client = SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY && window.supabase
+export const configured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+export const client = configured && window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
   : null;
 
@@ -39,14 +40,15 @@ export async function uploadMedia(item) {
   return { src: mediaPrefix + path, name: item.name, type: file.type.startsWith("video/") ? "video" : "image" };
 }
 
-export async function readCatalog() {
-  const { data, error } = await client.from("bosque_catalog").select("state,revision").eq("id", 1).single();
-  if (error) throw new Error("No se pudo cargar el catálogo publicado.");
+export async function readCatalog(workshop = false) {
+  const table = workshop ? "bosque_workshop" : "bosque_catalog";
+  const { data, error } = await client.from(table).select("state,revision").eq("id", 1).single();
+  if (error) throw new Error(workshop ? "No se pudieron cargar las piezas del taller." : "No se pudo cargar el catálogo publicado.");
   return { catalog: data.state || initialCatalog, revision: data.revision };
 }
 
 export async function writeCatalog(catalog, revision) {
-  const { data, error } = await client.from("bosque_catalog")
+  const { data, error } = await client.from("bosque_workshop")
     .update({ state: catalog, revision: revision + 1 })
     .eq("id", 1).eq("revision", revision).select("revision").maybeSingle();
   if (error) throw new Error("No se pudo guardar. Comprueba la conexión y tu sesión antes de volver a intentarlo.");

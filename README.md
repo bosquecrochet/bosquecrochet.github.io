@@ -20,6 +20,10 @@ Abre http://127.0.0.1:8000/ en el navegador. Con config.js vacío se puede explo
 
 Las reglas de Supabase conceden lectura pública del catálogo y reservan la escritura y la subida a las cuentas autorizadas por UUID. El catálogo utiliza una revisión para evitar que dos ediciones simultáneas se sobrescriban. El componente de navegador de Supabase está incluido en vendor/ con su licencia.
 
+## Ocultar una pieza
+
+Entra en el taller, abre la ficha y pulsa **Ocultar pieza**. Para recuperarla abre **Acceso al taller → Piezas ocultas**, elige la ficha y pulsa **Volver a mostrar**. El catálogo público recibe únicamente las fichas visibles. Los enlaces directos a fotos y vídeos almacenados como archivos públicos siguen funcionando.
+
 ## Recuperar cambios guardados en la web anterior
 
 Si tu madre añadió o editó piezas en el navegador anterior, abre la nueva web en la misma dirección, con el mismo navegador y perfil. Desde Acceso al taller, pulsa Importar cambios de este navegador antes de realizar la primera edición en Supabase. Ese botón aparece cuando se detectan datos de la galería anterior y el catálogo compartido todavía está en su revisión inicial. La confirmación indica cuántas piezas se van a publicar. Se importan altas, cambios, categorías y elementos retirados. Las notas y favoritas siguen siendo locales.

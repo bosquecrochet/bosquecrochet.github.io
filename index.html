@@ -20,8 +20,10 @@
         <button class="text-button" id="show-favorites" aria-pressed="false"><span aria-hidden="true">♡</span> Favoritas</button>
       </div>
     </div>
-    <nav class="wrap categories" id="categories" aria-label="Categorías de la colección"></nav>
   </header>
+  <div class="category-bar">
+    <nav class="wrap categories" id="categories" aria-label="Categorías de la colección"></nav>
+  </div>
   <main>
     <section class="hero wrap" aria-labelledby="main-title">
       <div class="hero-copy">
@@ -29,9 +31,9 @@
         <p class="intro">Una colección de ramos, amigurumis y adornos tejidos por mi madre.</p>
         <a class="editorial-link" href="./#coleccion">Ver todas las piezas</a>
       </div>
-      <figure class="hero-photo">
-        <img src="WhatsApp Image 2026-05-22 at 16.55.32 (1).jpeg" alt="Cesta de flores tejidas a mano, con un girasol y flores de colores" fetchpriority="high">
-        <figcaption>Cesta de flores variadas</figcaption>
+      <figure class="hero-photo" id="hero-photo" hidden>
+        <img id="hero-image" alt="" fetchpriority="high">
+        <figcaption id="hero-caption"></figcaption>
       </figure>
     </section>
     <section class="collection" id="coleccion" aria-labelledby="collection-title">
@@ -44,7 +46,11 @@
           </div>
         </div>
         <p id="catalog-status" class="status" role="status" hidden></p>
-        <div class="gallery-meta"><p id="result-count" role="status"></p><button class="text-button" id="clear-filters" hidden>Limpiar filtros</button></div>
+        <div class="gallery-meta">
+          <p id="result-count" role="status"></p>
+          <button class="text-button" id="close-hidden" hidden>Volver al catálogo público</button>
+          <button class="text-button" id="clear-filters" hidden>Limpiar filtros</button>
+        </div>
         <div class="gallery" id="gallery"></div>
         <p id="empty" class="empty" hidden>No hay piezas con estos filtros.</p>
         <div class="more"><button class="button outline" id="more" hidden>Ver más piezas</button></div>
@@ -69,7 +75,11 @@
         <details class="notes"><summary>Notas personales</summary><div id="notes"></div>
           <form id="notes-form"><label for="note">Añadir una nota en este dispositivo</label><textarea id="note" maxlength="600" required></textarea><button class="button outline">Guardar nota</button><p id="note-status" role="status"></p></form>
         </details>
-        <div class="admin-actions" id="detail-actions" hidden><button class="button outline" id="edit-piece">Editar pieza</button><button class="text-button danger" id="delete-piece">Eliminar pieza</button></div>
+        <div class="admin-actions" id="detail-actions" hidden>
+          <button class="button outline" id="edit-piece">Editar pieza</button>
+          <button class="button outline" id="toggle-visibility">Ocultar pieza</button>
+          <button class="text-button danger" id="delete-piece">Eliminar pieza</button>
+        </div>
         <p class="status" id="detail-status" role="status"></p>
       </div>
     </div>
@@ -85,6 +95,7 @@
       </form>
       <div id="admin-panel" hidden>
         <div class="admin-actions"><button class="button primary" id="new-piece">Nueva pieza</button><button class="button outline" id="edit-categories">Gestionar categorías</button></div>
+        <button class="button outline" id="view-hidden">Piezas ocultas</button>
         <button id="import-local" class="button outline" hidden>Importar cambios de este navegador</button>
         <button class="text-button" id="logout">Cerrar sesión</button>
       </div>

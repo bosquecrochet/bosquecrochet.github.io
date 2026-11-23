@@ -1,5 +1,5 @@
 import {
-  client, initialCatalog, legacyCatalog, readCatalog, readLocal, safeMediaUrl,
+  client, configured, initialCatalog, legacyCatalog, readCatalog, readLocal, safeMediaUrl,
   saveLocal, uploadMedia, validateFile, writeCatalog
 } from "./catalog.js";
 
@@ -16,11 +16,14 @@ const legacyNotes = readLocal("bosqueCrochetProjectMeta.v2", {});
 const legacyProjects = new Map(readLocal("bosqueCrochetUserProjects.v2", []).map(item => [String(item.idKey || item.id), item]));
 const pageSize = 12;
 
-let catalog = initialCatalog;
+let catalog = configured ? { ...initialCatalog, projects: [] } : initialCatalog;
+let publicRevision = null;
+let workshop = null;
 let revision = null;
 let admin = false;
 let activeCategory = new URLSearchParams(location.search).get("categoria") || "all";
 let onlyFavorites = false;
+let showHidden = false;
 let limit = pageSize;
 let detailId = "";
 let mediaIndex = 0;
@@ -35,7 +38,7 @@ function categoryName(id) {
 }
 
 function projectById(id) {
-  return catalog.projects.find(project => String(project.idKey) === String(id));
+  return (workshop || catalog).projects.find(project => String(project.idKey) === String(id));
 }
 
 function categoryUrl(id) {
@@ -58,19 +61,35 @@ function mediaHtml(media, title, controls = false) {
 
 function renderCategories() {
   const nav = $("categories");
+  const scroll = nav.scrollLeft;
   nav.innerHTML = catalog.categories.map(cat => '<a href="' + esc(categoryUrl(cat.id)) + '" data-category="' + esc(cat.id)
-    + '"' + (cat.id === activeCategory && !onlyFavorites ? ' aria-current="true"' : "") + '>'
+    + '"' + (cat.id === activeCategory && !onlyFavorites && !showHidden ? ' aria-current="true"' : "") + '>'
     + (cat.id === "all" ? "Todas las piezas" : esc(cat.name)) + '</a>').join("");
+  nav.scrollLeft = scroll;
+}
+
+function renderCover() {
+  const photos = project => project.media.find(item => item.type === "image" && safeMediaUrl(item.src));
+  const project = catalog.projects.find(item => item.media.some(media =>
+    media.src === "WhatsApp Image 2026-05-22 at 16.55.32 (1).jpeg")) || catalog.projects.find(photos);
+  $("hero-photo").hidden = !project;
+  if (!project) return;
+  const image = $("hero-image");
+  const src = safeMediaUrl(photos(project)?.src);
+  if (image.getAttribute("src") !== src) image.setAttribute("src", src);
+  image.alt = project.title;
+  $("hero-caption").textContent = project.title;
 }
 
 function renderGallery() {
-  $("collection-title").textContent = onlyFavorites ? "Favoritas"
+  $("collection-title").textContent = showHidden ? "Piezas ocultas" : onlyFavorites ? "Favoritas"
     : activeCategory === "all" ? "La colección" : categoryName(activeCategory);
   const query = fold($("search").value.trim());
   const sort = $("sort").value;
-  const pieces = catalog.projects.filter(project => {
+  const source = showHidden ? workshop?.projects || [] : catalog.projects;
+  const pieces = source.filter(project => {
     const text = fold([project.title, project.desc, categoryName(project.cat), ...(project.tags || [])].join(" "));
-    return (activeCategory === "all" || project.cat === activeCategory)
+    return (!showHidden || project.hidden === true) && (activeCategory === "all" || project.cat === activeCategory)
       && (!onlyFavorites || favorites.has(String(project.idKey))) && text.includes(query);
   });
   if (sort === "name") pieces.sort((a, b) => a.title.localeCompare(b.title, "es"));
@@ -81,17 +100,21 @@ function renderGallery() {
     const badge = project.media.length > 1 ? project.media.length + " archivos" : project.media[0]?.type === "video" ? "Vídeo" : "";
     return '<article class="card"><button class="card-open" data-piece="' + id + '" aria-label="Ver ' + esc(project.title)
       + '"><span class="card-photo">' + mediaHtml(project.media[0], project.title)
-      + '</span><span class="card-copy"><span class="eyebrow">' + esc(categoryName(project.cat))
+      + '</span><span class="card-copy"><span class="eyebrow card-label">' + esc(categoryName(project.cat))
+      + (badge ? '<span class="media-count">' + badge + '</span>' : "")
       + '</span><span class="card-title">' + esc(project.title) + '</span><span class="card-desc">' + esc(project.desc)
-      + '</span></span></button>' + (badge ? '<span class="media-count">' + badge + '</span>' : "")
-      + '<button class="heart" data-favorite="' + id + '" aria-label="Favorita: ' + esc(project.title)
-      + '" aria-pressed="' + marked + '">' + (marked ? "♥" : "♡") + '</button></article>';
+      + '</span></span></button>'
+      + (showHidden ? "" : '<button class="heart" data-favorite="' + id + '" aria-label="Favorita: ' + esc(project.title)
+      + '" aria-pressed="' + marked + '">' + (marked ? "♥" : "♡") + '</button>') + '</article>';
   }).join("");
   const count = pieces.length + (pieces.length === 1 ? " pieza" : " piezas");
-  $("result-count").textContent = onlyFavorites ? count + " en favoritas" : count;
-  $("empty").textContent = onlyFavorites && !query && activeCategory === "all"
+  const waitingForCatalog = !showHidden && configured && publicRevision === null;
+  $("result-count").textContent = waitingForCatalog ? "" : onlyFavorites ? count + " en favoritas" : count;
+  $("empty").textContent = showHidden && !query ? "Aún no hay piezas ocultas."
+    : onlyFavorites && !query && activeCategory === "all"
     ? "Todavía no tienes favoritas. Pulsa el corazón de una pieza para guardarla." : "No hay piezas con estos filtros.";
-  $("empty").hidden = pieces.length > 0;
+  $("empty").hidden = waitingForCatalog || pieces.length > 0;
+  $("close-hidden").hidden = !showHidden;
   $("more").hidden = pieces.length <= limit;
   $("clear-filters").hidden = activeCategory === "all" && !query && !onlyFavorites;
   $("show-favorites").setAttribute("aria-pressed", onlyFavorites);
@@ -100,6 +123,7 @@ function renderGallery() {
 function updateGallery() {
   if (!catalog.categories.some(category => category.id === activeCategory)) activeCategory = "all";
   renderCategories();
+  renderCover();
   renderGallery();
 }
 
@@ -165,9 +189,17 @@ function openDetail(id) {
   $("notes-form").reset();
   $("detail").querySelector("details").open = false;
   updateDetailFavorite();
+  refreshVisibility(project);
   renderNotes();
   renderDetailMedia();
   $("detail").showModal();
+}
+
+function refreshVisibility(project) {
+  const hidden = project.hidden === true;
+  $("toggle-visibility").textContent = hidden ? "Volver a mostrar" : "Ocultar pieza";
+  $("detail-favorite").hidden = hidden;
+  $("detail").querySelector("details").hidden = hidden;
 }
 
 function refreshAdmin() {
@@ -177,33 +209,56 @@ function refreshAdmin() {
   $("import-local").hidden = !(admin && revision === 0 && legacyCatalog());
 }
 
+function clearWorkshop() {
+  const wasBrowsingHidden = showHidden;
+  const viewedHidden = projectById(detailId)?.hidden === true;
+  admin = false;
+  workshop = null;
+  revision = null;
+  showHidden = false;
+  if (viewedHidden) $("detail").close();
+  $("editor").close();
+  $("category-editor").close();
+  refreshAdmin();
+  if (wasBrowsingHidden) updateGallery();
+}
+
 async function checkSession() {
   if (!client) return;
   const { data } = await client.auth.getSession();
   if (!data.session) {
-    admin = false;
-    refreshAdmin();
+    clearWorkshop();
     return;
   }
   const result = await client.rpc("bosque_is_admin");
-  admin = !result.error && result.data === true;
-  if (!admin) {
+  if (result.error) throw new Error("No se pudo comprobar el acceso al taller.");
+  if (result.data !== true) {
     await client.auth.signOut({ scope: "local" });
-    $("admin-status").textContent = "Esta cuenta no tiene permiso para publicar en el taller.";
+    clearWorkshop();
+    throw new Error("Esta cuenta no tiene permiso para publicar en el taller.");
   }
+  const dataWorkshop = await readCatalog(true);
+  workshop = dataWorkshop.catalog;
+  revision = dataWorkshop.revision;
+  admin = true;
   refreshAdmin();
 }
 
 async function loadPublished() {
-  if (!client) return;
+  if (!configured) return;
   try {
-    ({ catalog, revision } = await readCatalog());
+    if (!client) throw new Error("No se pudo cargar la conexión con el catálogo.");
+    const published = await readCatalog();
+    if (publicRevision === null || published.revision >= publicRevision) {
+      catalog = published.catalog;
+      publicRevision = published.revision;
+    }
     $("catalog-status").hidden = true;
     updateGallery();
     refreshAdmin();
   } catch (error) {
     $("admin-status").textContent = error.message + " Recarga la página para volver a intentarlo.";
-    $("catalog-status").textContent = "La colección actualizada no está disponible. Mostramos la colección inicial.";
+    $("catalog-status").textContent = "No se pudo cargar la colección. Recarga la página para volver a intentarlo.";
     $("catalog-status").hidden = false;
   }
 }
@@ -212,7 +267,9 @@ async function save(next, expectedRevision) {
   if (!admin || revision === null) throw new Error("Inicia sesión con la cuenta del taller.");
   if (expectedRevision !== revision) throw new Error("Vuelve a abrir el formulario para editar la última versión del catálogo.");
   revision = await writeCatalog(next, expectedRevision);
-  catalog = next;
+  workshop = next;
+  catalog = { ...next, projects: next.projects.filter(item => item.hidden !== true) };
+  publicRevision = revision;
   updateGallery();
   refreshAdmin();
 }
@@ -279,12 +336,17 @@ $("categories").addEventListener("click", event => {
   if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   onlyFavorites = false;
+  showHidden = false;
   $("search").value = "";
   setCategory(link.dataset.category);
   $("collection-title").focus({ preventScroll: true });
   $("coleccion").scrollIntoView();
 });
-window.addEventListener("popstate", () => setCategory(new URLSearchParams(location.search).get("categoria") || "all", false));
+window.addEventListener("popstate", () => {
+  showHidden = false;
+  onlyFavorites = false;
+  setCategory(new URLSearchParams(location.search).get("categoria") || "all", false);
+});
 $("search").addEventListener("input", () => { limit = pageSize; renderGallery(); });
 $("sort").addEventListener("change", () => { limit = pageSize; renderGallery(); });
 $("clear-filters").addEventListener("click", () => {
@@ -295,9 +357,16 @@ $("clear-filters").addEventListener("click", () => {
 });
 $("show-favorites").addEventListener("click", () => {
   onlyFavorites = !onlyFavorites;
+  showHidden = false;
   $("search").value = "";
   setCategory("all");
   $("coleccion").scrollIntoView();
+});
+$("close-hidden").addEventListener("click", () => {
+  showHidden = false;
+  $("search").value = "";
+  setCategory("all", false);
+  $("collection-title").focus({ preventScroll: true });
 });
 $("more").addEventListener("click", () => {
   const prior = limit;
@@ -352,27 +421,45 @@ $("login").addEventListener("submit", event => {
     $("password").value = "";
     if (error) throw new Error("No se pudo iniciar sesión. Revisa el correo y la contraseña.");
     await checkSession();
-    if (!admin) return "Esta cuenta no tiene permiso para publicar en el taller.";
-    if (revision === null) await loadPublished();
-    return revision === null ? "No se pudo cargar el catálogo. Recarga la página para continuar." : "";
   });
 });
 $("logout").addEventListener("click", event => {
   runAction(event.currentTarget, "admin-status", async () => {
     const { error } = await client.auth.signOut({ scope: "local" });
     if (error) throw new Error("No se pudo cerrar la sesión. Vuelve a intentarlo.");
-    admin = false;
-    refreshAdmin();
+    clearWorkshop();
     return "Sesión cerrada.";
   });
 });
+$("view-hidden").addEventListener("click", () => {
+  if (!admin || !workshop) return;
+  showHidden = true;
+  onlyFavorites = false;
+  $("search").value = "";
+  setCategory("all");
+  $("admin").close();
+  $("collection-title").focus({ preventScroll: true });
+  $("coleccion").scrollIntoView();
+});
 $("new-piece").addEventListener("click", () => openEditor());
 $("edit-piece").addEventListener("click", () => openEditor(projectById(detailId)));
+$("toggle-visibility").addEventListener("click", event => {
+  const project = projectById(detailId);
+  if (!admin || !project) return;
+  const hidden = project.hidden !== true;
+  runAction(event.currentTarget, "detail-status", async () => {
+    const updated = { ...project, hidden };
+    const projects = workshop.projects.map(item => item === project ? updated : item);
+    await save({ ...workshop, projects }, revision);
+    refreshVisibility(updated);
+    return hidden ? "Pieza oculta en el catálogo público." : "Pieza visible en el catálogo público.";
+  });
+});
 $("delete-piece").addEventListener("click", event => {
   const project = projectById(detailId);
   if (!admin || !project || !confirm("¿Quitar «" + project.title + "» del catálogo público?")) return;
   runAction(event.currentTarget, "detail-status", async () => {
-    await save({ ...catalog, projects: catalog.projects.filter(item => item !== project) }, revision);
+    await save({ ...workshop, projects: workshop.projects.filter(item => item !== project) }, revision);
     $("detail").close();
   });
 });
@@ -424,10 +511,10 @@ $("piece-form").addEventListener("submit", event => {
       $("files").disabled = false;
       $("camera").disabled = false;
     }
-    const projects = editId ? catalog.projects.map(item => item.idKey === editId ? piece : item) : [piece, ...catalog.projects];
-    await save({ ...catalog, projects }, editorRevision);
+    const projects = editId ? workshop.projects.map(item => item.idKey === editId ? piece : item) : [piece, ...workshop.projects];
+    await save({ ...workshop, projects }, editorRevision);
     $("editor").close();
-    setStatus("admin-status", "Pieza publicada.");
+    setStatus("admin-status", piece.hidden ? "Cambios guardados. La pieza sigue oculta." : "Pieza publicada.");
     $("admin").showModal();
   });
 });
@@ -466,7 +553,7 @@ $("category-form").addEventListener("submit", event => {
     const names = categories.map(cat => fold(cat.name));
     if (names.includes("") || new Set(names).size !== names.length) throw new Error("Escribe un nombre distinto para cada categoría.");
     const ids = new Set(categories.map(cat => cat.id));
-    const projects = catalog.projects.map(item => ids.has(item.cat) ? item : { ...item, cat: "decoracion" });
+    const projects = workshop.projects.map(item => ids.has(item.cat) ? item : { ...item, cat: "decoracion" });
     await save({ categories, projects }, editorRevision);
     $("category-editor").close();
     setStatus("admin-status", "Categorías publicadas.");
@@ -493,10 +580,7 @@ $("import-local").addEventListener("click", event => {
 updateGallery();
 refreshAdmin();
 loadPublished();
-checkSession();
+checkSession().catch(error => setStatus("admin-status", error.message));
 client?.auth.onAuthStateChange(event => {
-  if (event === "SIGNED_OUT") {
-    admin = false;
-    refreshAdmin();
-  }
+  if (event === "SIGNED_OUT") clearWorkshop();
 });
