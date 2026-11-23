@@ -69,16 +69,25 @@ function renderCategories() {
 }
 
 function renderCover() {
-  const photos = project => project.media.find(item => item.type === "image" && safeMediaUrl(item.src));
-  const project = catalog.projects.find(item => item.media.some(media =>
-    media.src === "WhatsApp Image 2026-05-22 at 16.55.32 (1).jpeg")) || catalog.projects.find(photos);
-  $("hero-photo").hidden = !project;
-  if (!project) return;
-  const image = $("hero-image");
-  const src = safeMediaUrl(photos(project)?.src);
-  if (image.getAttribute("src") !== src) image.setAttribute("src", src);
-  image.alt = project.title;
-  $("hero-caption").textContent = project.title;
+  const cover = $("hero-photos");
+  const featured = ["17", "grupo-raton", "38"];
+  const available = catalog.projects.flatMap(piece => {
+    const photo = piece.media.find(item => item.type === "image" && safeMediaUrl(item.src));
+    return photo ? [{ piece, src: safeMediaUrl(photo.src) }] : [];
+  });
+  const selected = featured.map(id => available.find(item => String(item.piece.idKey) === id)).filter(Boolean);
+  for (const item of available) {
+    if (selected.length === featured.length) break;
+    if (!selected.includes(item)) selected.push(item);
+  }
+  cover.hidden = !selected.length;
+  cover.classList.toggle("single", selected.length === 1);
+  const html = selected.map(({ piece, src }, index) =>
+    '<figure class="hero-photo"><img src="' + esc(src) + '" alt="' + esc(piece.title)
+    + '" decoding="async"' + (index === 0 ? ' fetchpriority="high"' : "") + '><figcaption>'
+    + esc(piece.title) + '</figcaption></figure>'
+  ).join("");
+  if (cover.innerHTML !== html) cover.innerHTML = html;
 }
 
 function renderGallery() {

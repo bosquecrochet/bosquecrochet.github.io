@@ -6,6 +6,7 @@
   <meta name="description" content="Descubre la colección de piezas tejidas a mano de El bosque de crochet: amigurumis, flores, adornos y mucho más.">
   <meta name="theme-color" content="#faf8f3">
   <title>El bosque de crochet · Piezas tejidas a mano</title>
+  <link rel="icon" href="assets/flor-crochet.png" type="image/png">
   <link rel="stylesheet" href="style.css">
   <script src="vendor/supabase.js" defer></script>
   <script src="app.js" type="module"></script>
@@ -14,7 +15,7 @@
   <a class="skip" href="#coleccion">Saltar a la colección</a>
   <header class="site-header">
     <div class="wrap header-layout">
-      <a href="./" class="brand">El bosque de crochet</a>
+      <a href="./" class="brand"><img src="assets/flor-crochet.png" width="60" height="40" alt=""><span>El bosque de crochet</span></a>
       <div class="header-actions">
         <a href="#acerca">El taller</a>
         <button class="text-button" id="show-favorites" aria-pressed="false"><span aria-hidden="true">♡</span> Favoritas</button>
@@ -25,16 +26,15 @@
     <nav class="wrap categories" id="categories" aria-label="Categorías de la colección"></nav>
   </div>
   <main>
-    <section class="hero wrap" aria-labelledby="main-title">
-      <div class="hero-copy">
-        <h1 id="main-title">Crochet hecho a mano</h1>
-        <p class="intro">Una colección de ramos, amigurumis y adornos tejidos por mi madre.</p>
-        <a class="editorial-link" href="./#coleccion">Ver todas las piezas</a>
+    <section class="hero-backdrop" aria-labelledby="main-title">
+      <div class="hero wrap">
+        <div class="hero-copy">
+          <h1 id="main-title">Crochet<br>hecho a mano</h1>
+          <p class="intro">Una colección de ramos, amigurumis y adornos tejidos por mi madre.</p>
+          <a class="button primary" href="./#coleccion">Explorar la colección</a>
+        </div>
+        <div class="hero-photos" id="hero-photos" hidden></div>
       </div>
-      <figure class="hero-photo" id="hero-photo" hidden>
-        <img id="hero-image" alt="" fetchpriority="high">
-        <figcaption id="hero-caption"></figcaption>
-      </figure>
     </section>
     <section class="collection" id="coleccion" aria-labelledby="collection-title">
       <div class="wrap">
