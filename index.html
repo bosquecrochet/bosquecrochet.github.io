@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Descubre la colección de piezas tejidas a mano de El bosque de crochet: amigurumis, flores, adornos y mucho más.">
-  <meta name="theme-color" content="#f8f5ed">
+  <meta name="theme-color" content="#faf8f3">
   <title>El bosque de crochet · Piezas tejidas a mano</title>
   <link rel="stylesheet" href="style.css">
   <script src="vendor/supabase.js" defer></script>
@@ -14,18 +14,20 @@
   <a class="skip" href="#coleccion">Saltar a la colección</a>
   <header class="site-header">
     <div class="wrap header-layout">
-      <a href="./" class="brand"><span class="brand-mark" aria-hidden="true">✿</span><span>El bosque<br>de crochet</span></a>
-      <nav aria-label="Principal"><a href="#coleccion">Colección</a><a href="#acerca">El taller</a></nav>
-      <button class="button outline" id="show-favorites" aria-pressed="false"><span aria-hidden="true">♡</span> Favoritas</button>
+      <a href="./" class="brand">El bosque de crochet</a>
+      <div class="header-actions">
+        <a href="#acerca">El taller</a>
+        <button class="text-button" id="show-favorites" aria-pressed="false"><span aria-hidden="true">♡</span> Favoritas</button>
+      </div>
     </div>
+    <nav class="wrap categories" id="categories" aria-label="Categorías de la colección"></nav>
   </header>
   <main>
     <section class="hero wrap" aria-labelledby="main-title">
       <div class="hero-copy">
-        <p class="eyebrow">Tejido a mano, puntada a puntada</p>
-        <h1 id="main-title">El bosque <em>de crochet</em></h1>
-        <p class="intro">Flores que no se marchitan, criaturas de hilo y pequeños detalles tejidos a mano.</p>
-        <a class="button primary" href="#coleccion">Explorar la colección</a>
+        <h1 id="main-title">Crochet hecho a mano</h1>
+        <p class="intro">Una colección de ramos, amigurumis y adornos tejidos por mi madre.</p>
+        <a class="editorial-link" href="./#coleccion">Ver todas las piezas</a>
       </div>
       <figure class="hero-photo">
         <img src="WhatsApp Image 2026-05-22 at 16.55.32 (1).jpeg" alt="Cesta de flores tejidas a mano, con un girasol y flores de colores" fetchpriority="high">
@@ -35,13 +37,12 @@
     <section class="collection" id="coleccion" aria-labelledby="collection-title">
       <div class="wrap">
         <div class="collection-heading">
-          <h2 id="collection-title">La colección</h2>
+          <h2 id="collection-title" tabindex="-1">La colección</h2>
           <div class="tools">
-            <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" aria-label="Buscar piezas" placeholder="Buscar piezas"></label>
+            <input class="search" id="search" type="search" aria-label="Buscar piezas" placeholder="Buscar piezas">
             <select id="sort" aria-label="Ordenar piezas"><option value="collection">Orden de colección</option><option value="newest">Más recientes</option><option value="name">Nombre A–Z</option></select>
           </div>
         </div>
-        <nav class="categories" id="categories" aria-label="Categorías de la colección"></nav>
         <p id="catalog-status" class="status" role="status" hidden></p>
         <div class="gallery-meta"><p id="result-count" role="status"></p><button class="text-button" id="clear-filters" hidden>Limpiar filtros</button></div>
         <div class="gallery" id="gallery"></div>
@@ -51,8 +52,8 @@
       </div>
     </section>
     <section class="about wrap" id="acerca">
-      <span class="about-mark" aria-hidden="true">✿</span>
-      <div><h2>El taller</h2><p>El bosque de crochet reúne las piezas de una misma tejedora, desde sus primeros proyectos hasta sus creaciones más recientes.</p></div>
+      <h2>El taller</h2>
+      <p>Hice esta web para reunir los proyectos de crochet de mi madre. Cada ficha conserva las fotos y los detalles de la pieza.</p>
     </section>
   </main>
   <footer><div class="wrap footer-layout"><span>El bosque de crochet</span><button class="text-button" id="open-admin">Acceso al taller</button></div></footer>

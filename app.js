@@ -57,15 +57,15 @@ function mediaHtml(media, title, controls = false) {
 }
 
 function renderCategories() {
-  const counts = new Map([["all", catalog.projects.length]]);
-  for (const item of catalog.projects) counts.set(item.cat, (counts.get(item.cat) || 0) + 1);
   const nav = $("categories");
   nav.innerHTML = catalog.categories.map(cat => '<a href="' + esc(categoryUrl(cat.id)) + '" data-category="' + esc(cat.id)
-    + '"' + (cat.id === activeCategory ? ' aria-current="true"' : "") + '>' + esc(cat.name)
-    + ' <small>' + (counts.get(cat.id) || 0) + '</small></a>').join("");
+    + '"' + (cat.id === activeCategory && !onlyFavorites ? ' aria-current="true"' : "") + '>'
+    + (cat.id === "all" ? "Todas las piezas" : esc(cat.name)) + '</a>').join("");
 }
 
 function renderGallery() {
+  $("collection-title").textContent = onlyFavorites ? "Favoritas"
+    : activeCategory === "all" ? "La colección" : categoryName(activeCategory);
   const query = fold($("search").value.trim());
   const sort = $("sort").value;
   const pieces = catalog.projects.filter(project => {
@@ -278,8 +278,11 @@ $("categories").addEventListener("click", event => {
   const link = event.target.closest("[data-category]");
   if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
+  onlyFavorites = false;
+  $("search").value = "";
   setCategory(link.dataset.category);
-  [...$("categories").querySelectorAll("a")].find(item => item.dataset.category === activeCategory)?.focus();
+  $("collection-title").focus({ preventScroll: true });
+  $("coleccion").scrollIntoView();
 });
 window.addEventListener("popstate", () => setCategory(new URLSearchParams(location.search).get("categoria") || "all", false));
 $("search").addEventListener("input", () => { limit = pageSize; renderGallery(); });
