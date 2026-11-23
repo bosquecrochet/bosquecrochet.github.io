@@ -169,9 +169,25 @@ function updateDetailFavorite() {
   $("detail-favorite").setAttribute("aria-pressed", marked);
 }
 
+function restoreMergedFavorites(projects) {
+  let changed = false;
+  for (const project of projects) {
+    for (const previousId of project.previousIds || []) {
+      if (!favorites.delete(String(previousId))) continue;
+      favorites.add(String(project.idKey));
+      changed = true;
+    }
+  }
+  if (changed) saveLocal(favoritesKey, [...favorites]);
+}
+
 function renderNotes() {
-  const original = legacyNotes[detailId]?.comments ?? legacyProjects.get(detailId)?.comments ?? [];
-  $("notes").innerHTML = [...original, ...(privateNotes[detailId] || [])]
+  const ids = [detailId, ...(projectById(detailId)?.previousIds || [])].map(String);
+  const notes = ids.flatMap(id => [
+    ...(legacyNotes[id]?.comments ?? legacyProjects.get(id)?.comments ?? []),
+    ...(privateNotes[id] || [])
+  ]);
+  $("notes").innerHTML = notes
     .map(note => "<p>" + esc(note) + "</p>").join("");
 }
 
@@ -261,6 +277,7 @@ async function loadPublished() {
     if (publicRevision === null || published.revision >= publicRevision) {
       catalog = published.catalog;
       publicRevision = published.revision;
+      restoreMergedFavorites(catalog.projects);
     }
     $("catalog-status").hidden = true;
     updateGallery();
