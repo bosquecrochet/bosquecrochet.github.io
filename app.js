@@ -2,6 +2,7 @@ import {
   client, configured, initialCatalog, legacyCatalog, readCatalog, readLocal, safeMediaUrl,
   saveLocal, uploadMedia, validateFile, writeCatalog
 } from "./catalog.js?v=crochet-3";
+import { enableReordering, reorderVisibleProjects } from "./ordering.js";
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char =>
@@ -39,6 +40,10 @@ function categoryName(id) {
   return catalog.categories.find(cat => cat.id === id)?.name || "Decoración";
 }
 
+function categoryIcon(id) {
+  return "assets/categorias/" + (categoryIcons.has(id) ? id : "custom") + ".png";
+}
+
 function projectById(id) {
   return (workshop || catalog).projects.find(project => String(project.idKey) === String(id));
 }
@@ -66,8 +71,8 @@ function renderCategories() {
   const scroll = nav.scrollLeft;
   nav.innerHTML = catalog.categories.map(cat => '<a href="' + esc(categoryUrl(cat.id)) + '" data-category="' + esc(cat.id)
     + '"' + (cat.id === activeCategory && !onlyFavorites && !showHidden ? ' aria-current="true"' : "") + '>'
-    + '<img width="27" height="27" src="assets/categorias/' + (categoryIcons.has(cat.id) ? cat.id : "custom")
-    + '.png" alt=""><span>' + (cat.id === "all" ? "Todas las piezas" : esc(cat.name)) + '</span></a>').join("");
+    + '<img width="27" height="27" src="' + categoryIcon(cat.id) + '" alt=""><span>'
+    + (cat.id === "all" ? "Todas las piezas" : esc(cat.name)) + '</span></a>').join("");
   nav.scrollLeft = scroll;
 }
 
@@ -121,8 +126,11 @@ function cardMediaControls(project) {
 }
 
 function renderGallery() {
-  $("collection-title").textContent = showHidden ? "Piezas ocultas" : onlyFavorites ? "Favoritas"
+  $("collection-name").textContent = showHidden ? "Piezas ocultas" : onlyFavorites ? "Favoritas"
     : activeCategory === "all" ? "La colección" : categoryName(activeCategory);
+  const icon = $("collection-icon");
+  icon.hidden = showHidden || onlyFavorites;
+  if (!icon.hidden) icon.src = categoryIcon(activeCategory);
   const query = fold($("search").value.trim());
   const sort = $("sort").value;
   const source = showHidden ? workshop?.projects || [] : catalog.projects;
@@ -272,6 +280,7 @@ function clearWorkshop() {
   if (viewedHidden) $("detail").close();
   $("editor").close();
   $("category-editor").close();
+  $("order-editor").close();
   refreshAdmin();
   if (wasBrowsingHidden) updateGallery();
 }
@@ -508,6 +517,52 @@ $("view-hidden").addEventListener("click", () => {
   $("coleccion").scrollIntoView();
 });
 $("new-piece").addEventListener("click", () => openEditor());
+const orderList = $("order-list");
+enableReordering(orderList, message => setStatus("order-status", message));
+
+$("open-order").addEventListener("click", () => {
+  if (!admin || !workshop) return;
+  editorRevision = revision;
+  const visible = workshop.projects.filter(project => project.hidden !== true);
+  orderList.innerHTML = visible.map(project =>
+    '<li data-project-id="' + esc(project.idKey) + '"><div class="order-row">'
+    + '<span class="order-handle" aria-hidden="true" data-order-handle>⠿</span>'
+    + '<span class="order-photo">' + mediaHtml(project.media.find(media => media.type === "image"), "") + '</span>'
+    + '<span class="order-name">' + esc(project.title) + '</span>'
+    + '<div class="order-buttons">'
+    + '<button type="button" data-order-move="first" aria-label="Poner al principio: ' + esc(project.title) + '">Inicio</button>'
+    + '<button type="button" data-order-move="up" aria-label="Subir ' + esc(project.title) + '">↑</button>'
+    + '<button type="button" data-order-move="down" aria-label="Bajar ' + esc(project.title) + '">↓</button>'
+    + '</div></div></li>'
+  ).join("");
+  $("save-order").disabled = visible.length < 2;
+  setStatus("order-status", visible.length ? "" : "Todavía no hay piezas visibles para ordenar.");
+  $("admin").close();
+  $("order-editor").showModal();
+  orderList.scrollTop = 0;
+});
+
+$("order-form").addEventListener("submit", event => {
+  event.preventDefault();
+  runAction(event.submitter, "order-status", async () => {
+    if (!admin || !workshop) throw new Error("Inicia sesión con la cuenta del taller.");
+    const ids = Array.from(orderList.children, row => row.dataset.projectId);
+    const projects = reorderVisibleProjects(workshop.projects, ids);
+    orderList.inert = true;
+    try {
+      if (projects.some((piece, index) => piece !== workshop.projects[index])) {
+        await save({ ...workshop, projects }, editorRevision);
+      }
+    } finally {
+      orderList.inert = false;
+    }
+    $("sort").value = "collection";
+    renderGallery();
+    $("order-editor").close();
+    $("admin").showModal();
+    setStatus("admin-status", "El orden de colección está guardado.");
+  });
+});
 $("edit-piece").addEventListener("click", () => openEditor(projectById(detailId)));
 $("toggle-visibility").addEventListener("click", event => {
   const project = projectById(detailId);

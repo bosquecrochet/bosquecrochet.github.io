@@ -59,6 +59,8 @@ section[id] { scroll-margin-top: 4.7rem; }
 .hero-photo figcaption { padding: .4rem .15rem .05rem; color: var(--soft); font-size: .875rem; line-height: 1.3; overflow-wrap: anywhere; }
 .collection { padding-block: 2.4rem 4rem; position: relative; }
 .collection-heading, .gallery-meta, .footer-layout { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+#collection-title { display: flex; align-items: center; gap: .55rem; }
+#collection-icon { width: clamp(2rem, 5vw, 3.5rem); height: auto; flex: none; }
 .tools { display: flex; flex-wrap: wrap; gap: .55rem; }
 .search, select { color: inherit; background: transparent; border: 2px dashed var(--field-border); padding: .55rem .7rem; min-height: 44px; }
 .search { width: min(24ch, 100%); }
@@ -136,6 +138,21 @@ form > .button { justify-self: start; margin-top: .8rem; }
 .file-list li span { overflow-wrap: anywhere; }
 .category-row input { flex: 1; }
 .danger { color: #8c392e; }
+#order-help { margin-block: .65rem 0; color: var(--soft); }
+.order-list { max-height: min(52dvh, 450px); overflow-y: auto; overscroll-behavior: contain; margin: .35rem 0 0; padding: .25rem .4rem .25rem 1.9rem; }
+.order-list li::marker { color: var(--soft); font-variant-numeric: tabular-nums; }
+.order-list li + li { margin-top: .35rem; }
+.order-row { display: grid; grid-template-columns: 44px 42px minmax(0, 1fr) auto; gap: .4rem; align-items: center; padding: .2rem; background: var(--cream); }
+.order-row:has(.order-handle:hover), .order-list .dragging .order-row { background: #e7dfc6; }
+.order-handle { display: grid; place-items: center; min-height: 44px; cursor: grab; font-size: 1.4rem; touch-action: none; user-select: none; }
+.dragging .order-handle { cursor: grabbing; }
+.order-photo { display: grid; place-items: center; }
+.order-photo img { width: 42px; height: 42px; object-fit: contain; }
+.order-photo span { display: none; }
+.order-name { overflow-wrap: anywhere; }
+.order-buttons { display: flex; }
+.order-buttons button { min-width: 44px; min-height: 44px; padding: .25rem; background: transparent; border: 0; color: var(--ink); }
+.order-buttons button:hover { background: #e7dfc6; }
 :is(.hero-photo, .outline, .search, select, dialog, form input, form textarea) {
   border: 3px solid var(--field-border);
   border-image: var(--thread-frame) 10 round;
@@ -163,6 +180,9 @@ form > .button { justify-self: start; margin-top: .8rem; }
   .card-desc { display: none; }
   .detail-layout { grid-template-columns: 1fr; gap: .55rem; }
   .dialog-inner { padding: .9rem; }
+  .order-row { grid-template-columns: 44px 36px minmax(0, 1fr); gap: .25rem; }
+  .order-photo img { width: 36px; height: 36px; }
+  .order-buttons { grid-column: 2 / -1; justify-content: end; }
   .detail-media img, .detail-media video { max-height: 47dvh; }
   .about { grid-template-columns: 1fr; padding-block: 2.5rem; gap: .75rem; }
 }
