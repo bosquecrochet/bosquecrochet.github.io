@@ -1,0 +1,499 @@
+import {
+  client, initialCatalog, legacyCatalog, readCatalog, readLocal, safeMediaUrl,
+  saveLocal, uploadMedia, validateFile, writeCatalog
+} from "./catalog.js";
+
+const $ = id => document.getElementById(id);
+const esc = value => String(value ?? "").replace(/[&<>"']/g, char =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]
+);
+const fold = value => String(value ?? "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+const favoritesKey = "bosqueCrochetFavorites.v2";
+const notesKey = "bosqueCrochetPrivateNotes";
+const favorites = new Set(readLocal(favoritesKey, []).map(String));
+const privateNotes = readLocal(notesKey, {});
+const legacyNotes = readLocal("bosqueCrochetProjectMeta.v2", {});
+const legacyProjects = new Map(readLocal("bosqueCrochetUserProjects.v2", []).map(item => [String(item.idKey || item.id), item]));
+const pageSize = 12;
+
+let catalog = initialCatalog;
+let revision = null;
+let admin = false;
+let activeCategory = new URLSearchParams(location.search).get("categoria") || "all";
+let onlyFavorites = false;
+let limit = pageSize;
+let detailId = "";
+let mediaIndex = 0;
+let editId = "";
+let files = [];
+let categoryDraft = [];
+let editorRevision = null;
+let busy = false;
+
+function categoryName(id) {
+  return catalog.categories.find(cat => cat.id === id)?.name || "Decoración";
+}
+
+function projectById(id) {
+  return catalog.projects.find(project => String(project.idKey) === String(id));
+}
+
+function categoryUrl(id) {
+  const url = new URL(location.href);
+  if (id === "all") url.searchParams.delete("categoria");
+  else url.searchParams.set("categoria", id);
+  url.hash = "coleccion";
+  return url.pathname + url.search + url.hash;
+}
+
+function mediaHtml(media, title, controls = false) {
+  const src = safeMediaUrl(media?.src);
+  if (!src) return '<span>Sin imagen</span>';
+  if (media.type === "video") {
+    return '<video playsinline preload="' + (controls ? "metadata" : "none")
+      + '" src="' + esc(src) + '" ' + (controls ? "controls" : "muted aria-hidden=true") + '></video>';
+  }
+  return '<img src="' + esc(src) + '" alt="' + esc(title) + '" loading="' + (controls ? "eager" : "lazy") + '" decoding="async">';
+}
+
+function renderCategories() {
+  const counts = new Map([["all", catalog.projects.length]]);
+  for (const item of catalog.projects) counts.set(item.cat, (counts.get(item.cat) || 0) + 1);
+  const nav = $("categories");
+  nav.innerHTML = catalog.categories.map(cat => '<a href="' + esc(categoryUrl(cat.id)) + '" data-category="' + esc(cat.id)
+    + '"' + (cat.id === activeCategory ? ' aria-current="true"' : "") + '>' + esc(cat.name)
+    + ' <small>' + (counts.get(cat.id) || 0) + '</small></a>').join("");
+}
+
+function renderGallery() {
+  const query = fold($("search").value.trim());
+  const sort = $("sort").value;
+  const pieces = catalog.projects.filter(project => {
+    const text = fold([project.title, project.desc, categoryName(project.cat), ...(project.tags || [])].join(" "));
+    return (activeCategory === "all" || project.cat === activeCategory)
+      && (!onlyFavorites || favorites.has(String(project.idKey))) && text.includes(query);
+  });
+  if (sort === "name") pieces.sort((a, b) => a.title.localeCompare(b.title, "es"));
+  if (sort === "newest") pieces.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  $("gallery").innerHTML = pieces.slice(0, limit).map(project => {
+    const id = esc(project.idKey);
+    const marked = favorites.has(String(project.idKey));
+    const badge = project.media.length > 1 ? project.media.length + " archivos" : project.media[0]?.type === "video" ? "Vídeo" : "";
+    return '<article class="card"><button class="card-open" data-piece="' + id + '" aria-label="Ver ' + esc(project.title)
+      + '"><span class="card-photo">' + mediaHtml(project.media[0], project.title)
+      + '</span><span class="card-copy"><span class="eyebrow">' + esc(categoryName(project.cat))
+      + '</span><span class="card-title">' + esc(project.title) + '</span><span class="card-desc">' + esc(project.desc)
+      + '</span></span></button>' + (badge ? '<span class="media-count">' + badge + '</span>' : "")
+      + '<button class="heart" data-favorite="' + id + '" aria-label="Favorita: ' + esc(project.title)
+      + '" aria-pressed="' + marked + '">' + (marked ? "♥" : "♡") + '</button></article>';
+  }).join("");
+  const count = pieces.length + (pieces.length === 1 ? " pieza" : " piezas");
+  $("result-count").textContent = onlyFavorites ? count + " en favoritas" : count;
+  $("empty").textContent = onlyFavorites && !query && activeCategory === "all"
+    ? "Todavía no tienes favoritas. Pulsa el corazón de una pieza para guardarla." : "No hay piezas con estos filtros.";
+  $("empty").hidden = pieces.length > 0;
+  $("more").hidden = pieces.length <= limit;
+  $("clear-filters").hidden = activeCategory === "all" && !query && !onlyFavorites;
+  $("show-favorites").setAttribute("aria-pressed", onlyFavorites);
+}
+
+function updateGallery() {
+  if (!catalog.categories.some(category => category.id === activeCategory)) activeCategory = "all";
+  renderCategories();
+  renderGallery();
+}
+
+function setCategory(id, pushHistory = true) {
+  activeCategory = id;
+  limit = pageSize;
+  if (pushHistory) history.pushState(null, "", categoryUrl(id));
+  updateGallery();
+}
+
+function toggleFavorite(id, button) {
+  const marked = !favorites.has(id);
+  if (marked) favorites.add(id);
+  else favorites.delete(id);
+  saveLocal(favoritesKey, [...favorites]);
+  button.setAttribute("aria-pressed", marked);
+  if (button.id !== "detail-favorite") button.textContent = marked ? "♥" : "♡";
+  if (onlyFavorites) {
+    renderGallery();
+    if (button.id !== "detail-favorite") $("gallery").querySelector("button")?.focus();
+  } else if (button.id === "detail-favorite") {
+    const cardButton = [...$("gallery").querySelectorAll("[data-favorite]")].find(item => item.dataset.favorite === id);
+    if (cardButton) {
+      cardButton.setAttribute("aria-pressed", marked);
+      cardButton.textContent = marked ? "♥" : "♡";
+    }
+  }
+  updateDetailFavorite();
+}
+
+function updateDetailFavorite() {
+  const marked = favorites.has(detailId);
+  $("detail-favorite").textContent = marked ? "♥ Guardada en favoritas" : "♡ Guardar en favoritas";
+  $("detail-favorite").setAttribute("aria-pressed", marked);
+}
+
+function renderNotes() {
+  const original = legacyNotes[detailId]?.comments ?? legacyProjects.get(detailId)?.comments ?? [];
+  $("notes").innerHTML = [...original, ...(privateNotes[detailId] || [])]
+    .map(note => "<p>" + esc(note) + "</p>").join("");
+}
+
+function renderDetailMedia() {
+  const project = projectById(detailId);
+  $("detail-media").innerHTML = mediaHtml(project.media[mediaIndex], project.title, true);
+  $("thumbs").innerHTML = project.media.length < 2 ? "" : project.media.map((item, index) =>
+    '<button type="button" data-index="' + index + '" aria-label="Ver ' + (item.type === "video" ? "vídeo " : "foto ")
+      + (index + 1) + '" aria-current="' + (index === mediaIndex) + '">' + mediaHtml(item, "") + '</button>'
+  ).join("");
+}
+
+function openDetail(id) {
+  const project = projectById(id);
+  if (!project) return;
+  detailId = id;
+  mediaIndex = 0;
+  $("detail-title").textContent = project.title;
+  $("detail-category").textContent = categoryName(project.cat);
+  $("detail-description").textContent = project.desc;
+  $("detail-tags").innerHTML = (project.tags || []).map(tag => "<span>" + esc(tag) + "</span>").join("");
+  $("detail-status").textContent = "";
+  $("note-status").textContent = "";
+  $("notes-form").reset();
+  $("detail").querySelector("details").open = false;
+  updateDetailFavorite();
+  renderNotes();
+  renderDetailMedia();
+  $("detail").showModal();
+}
+
+function refreshAdmin() {
+  $("login").hidden = !client || admin;
+  $("admin-panel").hidden = !admin || revision === null;
+  $("detail-actions").hidden = !admin || revision === null;
+  $("import-local").hidden = !(admin && revision === 0 && legacyCatalog());
+}
+
+async function checkSession() {
+  if (!client) return;
+  const { data } = await client.auth.getSession();
+  if (!data.session) {
+    admin = false;
+    refreshAdmin();
+    return;
+  }
+  const result = await client.rpc("bosque_is_admin");
+  admin = !result.error && result.data === true;
+  if (!admin) {
+    await client.auth.signOut({ scope: "local" });
+    $("admin-status").textContent = "Esta cuenta no tiene permiso para publicar en el taller.";
+  }
+  refreshAdmin();
+}
+
+async function loadPublished() {
+  if (!client) return;
+  try {
+    ({ catalog, revision } = await readCatalog());
+    $("catalog-status").hidden = true;
+    updateGallery();
+    refreshAdmin();
+  } catch (error) {
+    $("admin-status").textContent = error.message + " Recarga la página para volver a intentarlo.";
+    $("catalog-status").textContent = "La colección actualizada no está disponible. Mostramos la colección inicial.";
+    $("catalog-status").hidden = false;
+  }
+}
+
+async function save(next, expectedRevision) {
+  if (!admin || revision === null) throw new Error("Inicia sesión con la cuenta del taller.");
+  if (expectedRevision !== revision) throw new Error("Vuelve a abrir el formulario para editar la última versión del catálogo.");
+  revision = await writeCatalog(next, expectedRevision);
+  catalog = next;
+  updateGallery();
+  refreshAdmin();
+}
+
+async function runAction(button, statusId, action) {
+  if (busy) return;
+  const status = $(statusId);
+  busy = true;
+  button.disabled = true;
+  status.textContent = "Procesando…";
+  try {
+    const message = await action();
+    status.textContent = message || "";
+  } catch (error) {
+    status.textContent = error.message || "Algo ha fallado. Vuelve a intentarlo.";
+  } finally {
+    busy = false;
+    button.disabled = false;
+  }
+}
+
+function renderFiles() {
+  $("file-list").innerHTML = files.map((item, index) => '<li><span>' + esc(item.name)
+    + '</span><button type="button" class="text-button danger" data-remove-file="' + index
+    + '" aria-label="Quitar ' + esc(item.name) + '">Quitar</button></li>').join("");
+}
+
+function openEditor(project) {
+  if (!admin) return;
+  $("piece-form").reset();
+  $("editor-status").textContent = "";
+  editId = project?.idKey || "";
+  editorRevision = revision;
+  files = [...(project?.media || [])];
+  $("editor-title").textContent = project ? "Editar pieza" : "Nueva pieza";
+  $("piece-category").innerHTML = catalog.categories.filter(cat => cat.id !== "all").map(cat =>
+    '<option value="' + esc(cat.id) + '">' + esc(cat.name) + '</option>').join("");
+  $("piece-category").value = project?.cat || "decoracion";
+  $("piece-name").value = project?.title || "";
+  $("piece-description").value = project?.desc || "";
+  $("piece-tags").value = (project?.tags || []).join(", ");
+  renderFiles();
+  $("detail").close();
+  $("admin").close();
+  $("editor").showModal();
+}
+
+function renderCategoryEditor() {
+  $("category-list").innerHTML = categoryDraft.map((cat, index) => {
+    const removable = cat.id !== "decoracion";
+    return '<div class="category-row"><input aria-label="Nombre de categoría ' + (index + 1)
+      + '" data-name="' + index + '" value="' + esc(cat.name) + '" maxlength="60" required>'
+      + (removable ? '<button type="button" class="text-button danger" data-remove-category="' + index
+      + '" aria-label="Quitar ' + esc(cat.name) + '">Quitar</button>' : "") + '</div>';
+  }).join("");
+}
+
+function setStatus(id, message) {
+  $(id).textContent = message;
+}
+
+$("categories").addEventListener("click", event => {
+  const link = event.target.closest("[data-category]");
+  if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  setCategory(link.dataset.category);
+  [...$("categories").querySelectorAll("a")].find(item => item.dataset.category === activeCategory)?.focus();
+});
+window.addEventListener("popstate", () => setCategory(new URLSearchParams(location.search).get("categoria") || "all", false));
+$("search").addEventListener("input", () => { limit = pageSize; renderGallery(); });
+$("sort").addEventListener("change", () => { limit = pageSize; renderGallery(); });
+$("clear-filters").addEventListener("click", () => {
+  $("search").value = "";
+  onlyFavorites = false;
+  setCategory("all");
+  $("search").focus();
+});
+$("show-favorites").addEventListener("click", () => {
+  onlyFavorites = !onlyFavorites;
+  $("search").value = "";
+  setCategory("all");
+  $("coleccion").scrollIntoView();
+});
+$("more").addEventListener("click", () => {
+  const prior = limit;
+  limit += pageSize;
+  renderGallery();
+  $("gallery").children[prior]?.querySelector("button")?.focus({ preventScroll: true });
+});
+$("gallery").addEventListener("click", event => {
+  const open = event.target.closest("[data-piece]");
+  const favorite = event.target.closest("[data-favorite]");
+  if (open) openDetail(open.dataset.piece);
+  if (favorite) toggleFavorite(favorite.dataset.favorite, favorite);
+});
+$("thumbs").addEventListener("click", event => {
+  const thumb = event.target.closest("[data-index]");
+  if (!thumb) return;
+  mediaIndex = Number(thumb.dataset.index);
+  renderDetailMedia();
+  $("thumbs").children[mediaIndex]?.focus();
+});
+$("detail").addEventListener("close", () => $("detail-media").replaceChildren());
+$("detail-favorite").addEventListener("click", event => toggleFavorite(detailId, event.currentTarget));
+$("notes-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const note = $("note").value.trim();
+  if (!note) return;
+  const notes = [...(privateNotes[detailId] || []), note];
+  if (!saveLocal(notesKey, { ...privateNotes, [detailId]: notes })) {
+    setStatus("note-status", "El navegador no ha podido guardar la nota.");
+    return;
+  }
+  privateNotes[detailId] = notes;
+  $("notes-form").reset();
+  setStatus("note-status", "");
+  renderNotes();
+});
+
+document.querySelectorAll("dialog").forEach(dialog => {
+  dialog.addEventListener("cancel", event => { if (busy) event.preventDefault(); });
+  dialog.querySelector("[data-close]").addEventListener("click", () => { if (!busy) dialog.close(); });
+});
+$("open-admin").addEventListener("click", () => {
+  if (!client) setStatus("admin-status", "El acceso privado está pendiente de configurar.");
+  $("admin").showModal();
+});
+$("login").addEventListener("submit", event => {
+  event.preventDefault();
+  runAction(event.submitter, "admin-status", async () => {
+    const { error } = await client.auth.signInWithPassword({
+      email: $("email").value.trim(), password: $("password").value
+    });
+    $("password").value = "";
+    if (error) throw new Error("No se pudo iniciar sesión. Revisa el correo y la contraseña.");
+    await checkSession();
+    if (!admin) return "Esta cuenta no tiene permiso para publicar en el taller.";
+    if (revision === null) await loadPublished();
+    return revision === null ? "No se pudo cargar el catálogo. Recarga la página para continuar." : "";
+  });
+});
+$("logout").addEventListener("click", event => {
+  runAction(event.currentTarget, "admin-status", async () => {
+    const { error } = await client.auth.signOut({ scope: "local" });
+    if (error) throw new Error("No se pudo cerrar la sesión. Vuelve a intentarlo.");
+    admin = false;
+    refreshAdmin();
+    return "Sesión cerrada.";
+  });
+});
+$("new-piece").addEventListener("click", () => openEditor());
+$("edit-piece").addEventListener("click", () => openEditor(projectById(detailId)));
+$("delete-piece").addEventListener("click", event => {
+  const project = projectById(detailId);
+  if (!admin || !project || !confirm("¿Quitar «" + project.title + "» del catálogo público?")) return;
+  runAction(event.currentTarget, "detail-status", async () => {
+    await save({ ...catalog, projects: catalog.projects.filter(item => item !== project) }, revision);
+    $("detail").close();
+  });
+});
+function addSelectedFiles(event) {
+  const errors = [];
+  for (const file of event.target.files) {
+    try {
+      validateFile(file);
+      files.push({ file, name: file.name });
+    } catch (error) { errors.push(file.name + " · " + error.message); }
+  }
+  event.target.value = "";
+  setStatus("editor-status", errors.join(" "));
+  renderFiles();
+}
+$("files").addEventListener("change", addSelectedFiles);
+$("camera").addEventListener("change", addSelectedFiles);
+$("file-list").addEventListener("click", event => {
+  const button = event.target.closest("[data-remove-file]");
+  if (!button || busy) return;
+  files.splice(Number(button.dataset.removeFile), 1);
+  renderFiles();
+  $("files").focus();
+});
+$("piece-form").addEventListener("submit", event => {
+  event.preventDefault();
+  runAction(event.submitter, "editor-status", async () => {
+    if (!admin) throw new Error("Inicia sesión con la cuenta del taller.");
+    const title = $("piece-name").value.trim();
+    if (!title || !files.length) throw new Error("Escribe un nombre y añade al menos una foto o un vídeo.");
+    const piece = {
+      ...projectById(editId), idKey: editId || crypto.randomUUID(), title,
+      cat: $("piece-category").value, desc: $("piece-description").value.trim(),
+      tags: $("piece-tags").value.split(",").map(tag => tag.trim()).filter(Boolean)
+    };
+    piece.date ||= new Date().toISOString().slice(0, 10);
+    piece.media = [];
+    const pendingFiles = [...files];
+    $("files").disabled = true;
+    $("camera").disabled = true;
+    try {
+      for (const [index, item] of pendingFiles.entries()) {
+        setStatus("editor-status", "Preparando archivo " + (index + 1) + " de " + pendingFiles.length + "…");
+        const uploaded = await uploadMedia(item);
+        files[index] = uploaded;
+        piece.media.push(uploaded);
+      }
+    } finally {
+      $("files").disabled = false;
+      $("camera").disabled = false;
+    }
+    const projects = editId ? catalog.projects.map(item => item.idKey === editId ? piece : item) : [piece, ...catalog.projects];
+    await save({ ...catalog, projects }, editorRevision);
+    $("editor").close();
+    setStatus("admin-status", "Pieza publicada.");
+    $("admin").showModal();
+  });
+});
+$("edit-categories").addEventListener("click", () => {
+  if (!admin) return;
+  editorRevision = revision;
+  categoryDraft = catalog.categories.filter(cat => cat.id !== "all").map(cat => ({ ...cat }));
+  renderCategoryEditor();
+  setStatus("category-status", "");
+  $("admin").close();
+  $("category-editor").showModal();
+});
+$("category-list").addEventListener("input", event => {
+  const input = event.target.closest("[data-name]");
+  if (input) categoryDraft[Number(input.dataset.name)].name = input.value;
+});
+$("category-list").addEventListener("click", event => {
+  const button = event.target.closest("[data-remove-category]");
+  if (!button || busy) return;
+  const index = Number(button.dataset.removeCategory);
+  if (!confirm("¿Quitar esta categoría? Sus piezas pasarán a Decoración al guardar.")) return;
+  categoryDraft.splice(index, 1);
+  renderCategoryEditor();
+  $("add-category").focus();
+});
+$("add-category").addEventListener("click", () => {
+  if (busy) return;
+  categoryDraft.push({ id: crypto.randomUUID(), name: "" });
+  renderCategoryEditor();
+  $("category-list").lastElementChild.querySelector("input").focus();
+});
+$("category-form").addEventListener("submit", event => {
+  event.preventDefault();
+  runAction(event.submitter, "category-status", async () => {
+    const categories = [{ id: "all", name: "Todo" }, ...categoryDraft.map(cat => ({ ...cat, name: cat.name.trim() }))];
+    const names = categories.map(cat => fold(cat.name));
+    if (names.includes("") || new Set(names).size !== names.length) throw new Error("Escribe un nombre distinto para cada categoría.");
+    const ids = new Set(categories.map(cat => cat.id));
+    const projects = catalog.projects.map(item => ids.has(item.cat) ? item : { ...item, cat: "decoracion" });
+    await save({ categories, projects }, editorRevision);
+    $("category-editor").close();
+    setStatus("admin-status", "Categorías publicadas.");
+    $("admin").showModal();
+  });
+});
+$("import-local").addEventListener("click", event => {
+  const legacy = legacyCatalog();
+  if (!admin || revision !== 0 || !legacy) return;
+  if (!confirm("¿Publicar la versión guardada en este navegador (" + legacy.projects.length
+    + " piezas)? Se aplicarán sus altas, ediciones y eliminaciones. Las notas personales seguirán en el dispositivo.")) return;
+  runAction(event.currentTarget, "admin-status", async () => {
+    for (const [index, project] of legacy.projects.entries()) {
+      setStatus("admin-status", "Importando pieza " + (index + 1) + " de " + legacy.projects.length + "…");
+      const media = [];
+      for (const item of project.media) media.push(await uploadMedia(item));
+      project.media = media;
+    }
+    await save(legacy, 0);
+    return "Se han publicado los cambios de este navegador.";
+  });
+});
+
+updateGallery();
+refreshAdmin();
+loadPublished();
+checkSession();
+client?.auth.onAuthStateChange(event => {
+  if (event === "SIGNED_OUT") {
+    admin = false;
+    refreshAdmin();
+  }
+});
