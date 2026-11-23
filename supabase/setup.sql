@@ -1,5 +1,5 @@
--- Ejecutar como propietario del proyecto. Crear primero la cuenta en Auth > Users.
--- Sustituir el UUID de ejemplo por el UUID real de esa cuenta.
+-- Ejecutar como propietario del proyecto. El taller se inicializa sin administradores.
+-- Tras crear la cuenta en Auth > Users, autorizar su UUID en bosque_private.admin.
 begin;
 
 create schema if not exists bosque_private;
@@ -10,9 +10,6 @@ create table if not exists bosque_private.admin (
   user_id uuid primary key references auth.users(id) on delete cascade
 );
 revoke all on bosque_private.admin from public, anon, authenticated;
-insert into bosque_private.admin (user_id)
-values ('00000000-0000-0000-0000-000000000000')
-on conflict do nothing;
 
 create or replace function public.bosque_is_admin()
 returns boolean language sql stable security definer set search_path = ''

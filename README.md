@@ -12,8 +12,8 @@ Abre http://127.0.0.1:8000/ en el navegador. Con config.js vacío se puede explo
 
 ## Activar el taller
 
-1. Crea o selecciona un proyecto de Supabase. En Authentication → Users, crea la cuenta de la administradora con su correo y contraseña. Copia su UUID. Desactiva el registro público en Authentication y conserva habilitado el inicio de sesión por correo y contraseña.
-2. En una copia de supabase/setup.sql, sustituye el UUID de ejemplo por el UUID de esa cuenta y ejecuta el archivo completo en el SQL Editor. Activa la Data API para el esquema public si el proyecto la tiene desactivada.
+1. Crea o selecciona el proyecto de Supabase. Ejecuta supabase/setup.sql en el SQL Editor. Activa la Data API para el esquema public si el proyecto la tiene desactivada.
+2. En Authentication → Users, crea la cuenta de la administradora con su correo y contraseña. Copia su UUID y autorízalo en el SQL Editor con `insert into bosque_private.admin (user_id) values ('UUID_DE_LA_CUENTA') on conflict do nothing;`. Desactiva el registro público en Authentication y conserva habilitado el inicio de sesión por correo y contraseña.
 3. Completa SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en config.js con la URL del proyecto y la clave publicable (sb_publishable_…). El repositorio es público. Guarda la contraseña y cualquier clave secreta fuera del repositorio.
 4. Prueba primero con una rama de revisión y luego incorpora los cambios a main en bosquecrochet/bosquecrochet.github.io, donde se publica GitHub Pages.
 5. Antes de dar por activo el cambio, comprueba con la cuenta de la administradora que se puede publicar una pieza de prueba con una foto y un vídeo, editarla y retirarla. Revisa en una ventana sin sesión que la pieza publicada se puede leer, que las herramientas de edición no aparecen y que la escritura se rechaza para el rol anon y una cuenta autenticada ajena al taller.
