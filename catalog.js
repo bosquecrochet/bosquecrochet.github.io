@@ -19,7 +19,10 @@ export const client = configured && window.supabase
 export function safeMediaUrl(src) {
   if (typeof src !== "string") return "";
   if (originalAssets.has(src)) return encodeURIComponent(src);
-  if (SUPABASE_URL && src.startsWith(mediaPrefix) && /^[\w-]+\.[a-z]+$/.test(src.slice(mediaPrefix.length))) return src;
+  if (SUPABASE_URL && src.startsWith(mediaPrefix)) {
+    const extension = /^[\w-]+\.([a-z0-9]+)$/.exec(src.slice(mediaPrefix.length))?.[1];
+    if (Object.values(formats).includes(extension)) return src;
+  }
   return "";
 }
 

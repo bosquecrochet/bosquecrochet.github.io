@@ -1,7 +1,7 @@
 import {
   client, configured, initialCatalog, legacyCatalog, readCatalog, readLocal, safeMediaUrl,
   saveLocal, uploadMedia, validateFile, writeCatalog
-} from "./catalog.js";
+} from "./catalog.js?v=crochet-3";
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char =>
@@ -15,6 +15,8 @@ const privateNotes = readLocal(notesKey, {});
 const legacyNotes = readLocal("bosqueCrochetProjectMeta.v2", {});
 const legacyProjects = new Map(readLocal("bosqueCrochetUserProjects.v2", []).map(item => [String(item.idKey || item.id), item]));
 const pageSize = 12;
+const categoryIcons = new Set(["all", "amigurumi", "flores", "navidad", "llaveros", "hogar", "accesorios", "letras", "textil", "decoracion"]);
+const cardMediaIndexes = new Map();
 
 let catalog = configured ? { ...initialCatalog, projects: [] } : initialCatalog;
 let publicRevision = null;
@@ -54,7 +56,7 @@ function mediaHtml(media, title, controls = false) {
   if (!src) return '<span>Sin imagen</span>';
   if (media.type === "video") {
     return '<video playsinline preload="' + (controls ? "metadata" : "none")
-      + '" src="' + esc(src) + '" ' + (controls ? "controls" : "muted aria-hidden=true") + '></video>';
+      + '" src="' + esc(src) + '" ' + (controls ? 'controls aria-label="Vídeo de ' + esc(title) + '"' : "muted aria-hidden=true") + '></video>';
   }
   return '<img src="' + esc(src) + '" alt="' + esc(title) + '" loading="' + (controls ? "eager" : "lazy") + '" decoding="async">';
 }
@@ -64,7 +66,8 @@ function renderCategories() {
   const scroll = nav.scrollLeft;
   nav.innerHTML = catalog.categories.map(cat => '<a href="' + esc(categoryUrl(cat.id)) + '" data-category="' + esc(cat.id)
     + '"' + (cat.id === activeCategory && !onlyFavorites && !showHidden ? ' aria-current="true"' : "") + '>'
-    + (cat.id === "all" ? "Todas las piezas" : esc(cat.name)) + '</a>').join("");
+    + '<img width="27" height="27" src="assets/categorias/' + (categoryIcons.has(cat.id) ? cat.id : "custom")
+    + '.png" alt=""><span>' + (cat.id === "all" ? "Todas las piezas" : esc(cat.name)) + '</span></a>').join("");
   nav.scrollLeft = scroll;
 }
 
@@ -90,6 +93,33 @@ function renderCover() {
   if (cover.innerHTML !== html) cover.innerHTML = html;
 }
 
+function cardMediaIndex(project) {
+  const index = cardMediaIndexes.get(String(project.idKey)) || 0;
+  return index < project.media.length ? index : 0;
+}
+
+function cardPreview(project) {
+  const item = project.media[cardMediaIndex(project)];
+  if (item?.type === "video") return mediaHtml(item, project.title, true);
+  return '<button class="card-photo-hit" data-piece="' + esc(project.idKey)
+    + '" aria-label="Ampliar foto de ' + esc(project.title) + '">'
+    + mediaHtml(item, project.title) + '</button>';
+}
+
+function cardMediaCount(project) {
+  const index = cardMediaIndex(project);
+  const type = project.media[index]?.type === "video" ? "Vídeo" : "Foto";
+  return type + " " + (index + 1) + " de " + project.media.length;
+}
+
+function cardMediaControls(project) {
+  if (project.media.length < 2) return "";
+  return '<div class="card-media-controls" role="group" aria-label="Archivos de ' + esc(project.title) + '">'
+    + '<button type="button" data-media-step="-1" aria-label="Archivo anterior"><span aria-hidden="true">‹</span></button>'
+    + '<span class="card-media-position" aria-live="polite">' + cardMediaCount(project) + '</span>'
+    + '<button type="button" data-media-step="1" aria-label="Archivo siguiente"><span aria-hidden="true">›</span></button></div>';
+}
+
 function renderGallery() {
   $("collection-title").textContent = showHidden ? "Piezas ocultas" : onlyFavorites ? "Favoritas"
     : activeCategory === "all" ? "La colección" : categoryName(activeCategory);
@@ -106,15 +136,13 @@ function renderGallery() {
   $("gallery").innerHTML = pieces.slice(0, limit).map(project => {
     const id = esc(project.idKey);
     const marked = favorites.has(String(project.idKey));
-    const badge = project.media.length > 1 ? project.media.length + " archivos" : project.media[0]?.type === "video" ? "Vídeo" : "";
-    return '<article class="card"><button class="card-open" data-piece="' + id + '" aria-label="Ver ' + esc(project.title)
-      + '"><span class="card-photo">' + mediaHtml(project.media[0], project.title)
-      + '</span><span class="card-copy"><span class="eyebrow card-label">' + esc(categoryName(project.cat))
-      + (badge ? '<span class="media-count">' + badge + '</span>' : "")
+    return '<article class="card" data-card="' + id + '"><div class="card-photo">' + cardPreview(project)
+      + '</div>' + cardMediaControls(project) + '<div class="card-body"><button class="card-open" data-piece="' + id
+      + '" aria-label="Ver ' + esc(project.title) + '"><span class="eyebrow">' + esc(categoryName(project.cat))
       + '</span><span class="card-title">' + esc(project.title) + '</span><span class="card-desc">' + esc(project.desc)
-      + '</span></span></button>'
+      + '</span></button>'
       + (showHidden ? "" : '<button class="heart" data-favorite="' + id + '" aria-label="Favorita: ' + esc(project.title)
-      + '" aria-pressed="' + marked + '">' + (marked ? "♥" : "♡") + '</button>') + '</article>';
+      + '" aria-pressed="' + marked + '">' + (marked ? "♥" : "♡") + '</button>') + '</div></article>';
   }).join("");
   const count = pieces.length + (pieces.length === 1 ? " pieza" : " piezas");
   const waitingForCatalog = !showHidden && configured && publicRevision === null;
@@ -204,7 +232,7 @@ function openDetail(id) {
   const project = projectById(id);
   if (!project) return;
   detailId = id;
-  mediaIndex = 0;
+  mediaIndex = cardMediaIndex(project);
   $("detail-title").textContent = project.title;
   $("detail-category").textContent = categoryName(project.cat);
   $("detail-description").textContent = project.desc;
@@ -401,6 +429,18 @@ $("more").addEventListener("click", () => {
   $("gallery").children[prior]?.querySelector("button")?.focus({ preventScroll: true });
 });
 $("gallery").addEventListener("click", event => {
+  const step = event.target.closest("[data-media-step]");
+  if (step) {
+    const card = step.closest("[data-card]");
+    const project = projectById(card.dataset.card);
+    if (!project || project.media.length < 2) return;
+    const length = project.media.length;
+    const next = (cardMediaIndex(project) + Number(step.dataset.mediaStep) + length) % length;
+    cardMediaIndexes.set(String(project.idKey), next);
+    card.querySelector(".card-photo").innerHTML = cardPreview(project);
+    card.querySelector(".card-media-position").textContent = cardMediaCount(project);
+    return;
+  }
   const open = event.target.closest("[data-piece]");
   const favorite = event.target.closest("[data-favorite]");
   if (open) openDetail(open.dataset.piece);
