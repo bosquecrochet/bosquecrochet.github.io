@@ -101,8 +101,8 @@ section[id] { scroll-margin-top: 4.7rem; }
 .card-order button { width: 44px; height: 44px; border: 2px dashed var(--field-border); border-radius: .45rem; background: var(--cream); color: var(--ink); font-size: 1.18rem; }
 .card-order button:hover:enabled { background: #dedbcf; }
 .card-order button:disabled { cursor: default; opacity: .4; }
-.card-cover { display: flex; align-items: center; justify-content: space-between; gap: .45rem; padding: .4rem 0; font-size: .875rem; }
-.card-cover select { min-width: 0; max-width: 100%; padding: .3rem .4rem; }
+.card-cover { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .4rem; padding: .2rem 0; font-size: .8125rem; }
+.card-cover select { width: 8rem; min-width: 0; max-width: 100%; min-height: 32px; padding: .12rem .3rem; }
 .card-cover-status { color: #75412e; font-size: .875rem; }
 .empty { padding-block: 3rem; text-align: center; }
 .more { display: grid; justify-content: center; margin-top: 1.5rem; }
@@ -188,7 +188,6 @@ form > .button { justify-self: start; margin-top: .8rem; }
   .collection { padding-block: 2rem; }
   .collection-heading { align-items: start; flex-direction: column; }
   .card-body .card-open { padding: .65rem 0 .9rem; }
-  .card-cover { flex-direction: column; align-items: stretch; gap: .2rem; }
   .card-desc { display: none; }
   .detail-layout { grid-template-columns: 1fr; gap: .55rem; }
   .dialog-inner { padding: .9rem; }
